@@ -9,6 +9,7 @@ const poolConfig = {
   waitForConnections: true,
   connectionLimit: 20,
   queueLimit: 0,
+  timezone: '+07:00'
 };
 
 // Singleton pattern for Next.js HMR

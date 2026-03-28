@@ -63,7 +63,8 @@ export default function EmployeesPage() {
     position_id: '',
     phone: '',
     status: 'active',
-    join_date: new Date().toISOString().split('T')[0]
+    join_date: new Date().toISOString().split('T')[0],
+    password: ''
   });
 
   const fetchData = async () => {
@@ -87,7 +88,8 @@ export default function EmployeesPage() {
       position_id: '', 
       phone: '', 
       status: 'active',
-      join_date: new Date().toISOString().split('T')[0]
+      join_date: new Date().toISOString().split('T')[0],
+      password: ''
     });
     setOpen(true);
   };
@@ -100,7 +102,8 @@ export default function EmployeesPage() {
       position_id: emp.position_id,
       phone: emp.phone || '',
       status: emp.status,
-      join_date: String(emp.join_date).split('T')[0]
+      join_date: String(emp.join_date).split('T')[0],
+      password: ''
     });
     setOpen(true);
   };
@@ -296,6 +299,15 @@ export default function EmployeesPage() {
                 onChange={(e) => setFormData({...formData, join_date: e.target.value})}
               />
             </Stack>
+
+            <TextField
+              label={editMode ? "Kata Sandi Baru (Kosongkan jika tidak diubah)" : "Kata Sandi Login"}
+              type="password"
+              fullWidth
+              value={formData.password}
+              onChange={(e) => setFormData({...formData, password: e.target.value})}
+              helperText={editMode ? "Isi hanya jika ingin mengganti password pegawai" : "Password untuk login ke aplikasi mobile"}
+            />
 
             <Divider sx={{ my: 1 }}><Chip label="Preview Gaji (Otomatis dari Jabatan)" size="small" /></Divider>
 

@@ -71,6 +71,7 @@ const menuItems = [
   },
   { icon: <MaintenanceIcon />, label: "Maintenance", href: "/maintenance" },
   { icon: <TicketIcon />, label: "Tiketing", href: "/support" },
+  { icon: <ScheduleIcon />, label: "Penugasan", href: "/tasks" },
   { 
     icon: <PresenceIcon />, 
     label: "Presensi", 
@@ -78,6 +79,8 @@ const menuItems = [
     subItems: [
       { label: "Aturan Shift", href: "/presence/shifts" },
       { label: "Jadwal Shift", href: "/presence/schedule" },
+      { label: "Permohonan Izin", href: "/presence/leave" },
+      { label: "Penugasan Lembur", href: "/presence/overtime" },
       { label: "Data Presensi", href: "/presence/history" },
     ]
   },
@@ -254,8 +257,21 @@ function SidebarContent() {
         <Divider sx={{ mb: 2 }} />
         <List disablePadding>
           <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton sx={{ borderRadius: 3, py: 1.5 }}>
-              <ListItemIcon sx={{ minWidth: 40, color: 'text.secondary' }}>
+            <ListItemButton 
+              component={Link}
+              href="/settings"
+              selected={pathname === '/settings'}
+              sx={{ 
+                borderRadius: 3, 
+                py: 1.5,
+                '&.Mui-selected': {
+                  bgcolor: alpha(theme.palette.primary.main, 0.1),
+                  color: 'primary.main',
+                  '& .MuiListItemIcon-root': { color: 'primary.main' },
+                }
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40, color: pathname === '/settings' ? 'primary.main' : 'text.secondary' }}>
                 <SettingsIcon />
               </ListItemIcon>
               <ListItemText primary="Settings" primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: 500 }} />

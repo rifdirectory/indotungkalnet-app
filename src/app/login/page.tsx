@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Card, Typography, TextField, Button, Alert, CircularProgress, Stack } from '@mui/material';
 import Image from 'next/image';
@@ -11,6 +11,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +58,7 @@ export default function LoginPage() {
           Sign in
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 4, textAlign: 'center' }}>
-          Gunakan Akun Administrator PT Indo Tungkal Net
+          Gunakan Akun ITNET untuk masuk ke sistem
         </Typography>
 
         {error && (

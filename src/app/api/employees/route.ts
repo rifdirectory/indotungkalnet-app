@@ -1,18 +1,78 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { getJakartaNow } from '@/lib/dateUtils';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const range = searchParams.get('range') || 'today';
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+    const picId = searchParams.get('pic_id');
+
+    const nowStr = getJakartaNow();
+    const [jakartaDate, jakartaTime] = nowStr.split(' ');
+    const isSunday = new Date(jakartaDate).getDay() === 0;
+
+    let whereClause = '(p.name IS NULL OR p.name != "Cleaning Service")';
+    let sqlParams: any[] = [jakartaDate, jakartaTime, range, startDate, endDate, jakartaDate];
+
+    if (picId) {
+        whereClause += ' AND p.pic_id = ?';
+        sqlParams.push(picId);
+    }
+
     const rows = await db.query(`
-      SELECT e.*, p.name as position_name,
-        p.basic_salary, p.allowance_pos, p.allowance_trans, 
-        p.allowance_meal, p.allowance_presence, p.deduction_bpjs
+      SELECT e.*, p.name as position_name, p.use_presence,
+        -- Check if explicitly on shift
+        (SELECT COUNT(*) FROM employee_shifts es 
+         JOIN shifts s ON es.shift_id = s.id 
+         WHERE es.employee_id = e.id AND es.date = ? AND ? BETWEEN s.start_time AND s.end_time
+        ) as explicit_on_shift,
+        -- Count active FIELD tasks (OTW or Working)
+        (SELECT COUNT(*) FROM ticket_assignees ta 
+         JOIN support_tickets t ON ta.ticket_id = t.id 
+         WHERE ta.employee_id = e.id AND t.status IN ('OTW', 'Sedang Dikerjakan')
+        ) as active_field_tasks,
+        -- Count total tasks in filter range
+        (SELECT COUNT(*) FROM ticket_assignees ta 
+         JOIN support_tickets t ON ta.ticket_id = t.id 
+         WHERE ta.employee_id = e.id 
+           AND (
+             (params.range_val = 'today' AND DATE(t.created_at) = params.jakarta_date)
+             OR (params.range_val = 'month' AND DATE_FORMAT(t.created_at, "%Y-%m-01") = DATE_FORMAT(params.jakarta_date, "%Y-%m-01"))
+             OR (params.range_val = 'custom' AND t.created_at BETWEEN CONCAT(params.start_date, ' 00:00:00') AND CONCAT(params.end_date, ' 23:59:59'))
+             OR (params.range_val = 'all')
+           )
+        ) as total_field_tasks_filtered
       FROM employees e
+      CROSS JOIN (SELECT ? as range_val, ? as start_date, ? as end_date, ? as jakarta_date) as params
       LEFT JOIN positions p ON e.position_id = p.id
+      WHERE ${whereClause}
       ORDER BY e.full_name ASC
-    `);
+    `, sqlParams);
     
-    return NextResponse.json({ success: true, data: rows });
+    // Process status for frontend
+    const result = (rows as any[]).map(emp => {
+      if (emp.total_field_tasks_filtered > 0) {
+        console.log(`[Employees API] ${emp.full_name}: ${emp.total_field_tasks_filtered} tasks`);
+      }
+      let currentStatus = 'Off';
+      const isNOC = emp.position_name?.toLowerCase().includes('noc');
+      const onShift = isNOC || emp.explicit_on_shift > 0 || (emp.use_presence === 1 && !isSunday && jakartaTime >= '08:00:00' && jakartaTime <= '16:00:00');
+      
+      if (!onShift) {
+        currentStatus = 'Off';
+      } else if (emp.active_field_tasks > 0) {
+        currentStatus = 'On-Site';
+      } else {
+        currentStatus = 'Free';
+      }
+      
+      return { ...emp, current_status: currentStatus };
+    });
+
+    return NextResponse.json({ success: true, data: result });
   } catch (error) {
     console.error('API Error:', error);
     return NextResponse.json({ success: false, message: 'Internal Server Error' }, { status: 500 });

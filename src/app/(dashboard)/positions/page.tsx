@@ -51,6 +51,7 @@ const parseIDR = (val: string) => {
 export default function PositionsPage() {
   const theme = useTheme();
   const [positions, setPositions] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]); // For PIC selection
   const [open, setOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<any>(null);
@@ -63,7 +64,9 @@ export default function PositionsPage() {
     allowance_trans: 0,
     allowance_meal: 0,
     allowance_presence: 0,
-    deduction_bpjs: 0
+    deduction_bpjs: 0,
+    use_presence: 1,
+    pic_id: ''
   });
 
   const fetchPositions = () => {
@@ -74,8 +77,17 @@ export default function PositionsPage() {
       });
   };
 
+  const fetchEmployees = () => {
+    fetch('/api/employees')
+      .then(res => res.json())
+      .then(data => {
+        if(data.success) setEmployees(data.data);
+      });
+  };
+
   useEffect(() => {
     fetchPositions();
+    fetchEmployees();
   }, []);
 
   const handleOpenAdd = () => {
@@ -88,7 +100,9 @@ export default function PositionsPage() {
       allowance_trans: 0,
       allowance_meal: 0,
       allowance_presence: 0,
-      deduction_bpjs: 0
+      deduction_bpjs: 0,
+      use_presence: 1,
+      pic_id: ''
     });
     setOpen(true);
   };
@@ -103,7 +117,9 @@ export default function PositionsPage() {
       allowance_trans: pos.allowance_trans || 0,
       allowance_meal: pos.allowance_meal || 0,
       allowance_presence: pos.allowance_presence || 0,
-      deduction_bpjs: pos.deduction_bpjs || 0
+      deduction_bpjs: pos.deduction_bpjs || 0,
+      use_presence: pos.use_presence ?? 1,
+      pic_id: pos.pic_id || ''
     });
     setOpen(true);
   };
@@ -188,8 +204,10 @@ export default function PositionsPage() {
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700, px: 4 }}>ID</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>NAMA JABATAN</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>PIC (LEADER)</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700 }}>GAJI POKOK</TableCell>
                     <TableCell align="center" sx={{ fontWeight: 700 }}>TOTAL PEGAWAI</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>ABSENSI</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700, px: 4 }}>AKSI</TableCell>
                   </TableRow>
                 </TableHead>
@@ -198,6 +216,14 @@ export default function PositionsPage() {
                     <TableRow key={pos.id} hover sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
                       <TableCell sx={{ color: 'text.secondary', px: 4 }}>#{pos.id}</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>{pos.name}</TableCell>
+                      <TableCell>
+                        <Chip 
+                            label={pos.pic_name || "Belum Set"} 
+                            size="small" 
+                            variant="outlined" 
+                            sx={{ fontWeight: 700, borderRadius: 1.5, borderColor: pos.pic_name ? 'primary.main' : 'divider', color: pos.pic_name ? 'primary.main' : 'text.disabled' }} 
+                        />
+                      </TableCell>
                       <TableCell align="right" sx={{ fontWeight: 700 }}>
                         Rp {formatIDR(pos.basic_salary)}
                       </TableCell>
@@ -213,6 +239,14 @@ export default function PositionsPage() {
                         }}>
                           {pos.employee_count || 0}
                         </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip 
+                          label={pos.use_presence ? "Aktif" : "Non-Aktif"} 
+                          size="small" 
+                          color={pos.use_presence ? "success" : "default"}
+                          sx={{ fontWeight: 700, borderRadius: 1.5, fontSize: '0.65rem' }}
+                        />
                       </TableCell>
                       <TableCell align="right" sx={{ px: 4 }}>
                         <IconButton size="small" onClick={(e) => handleMenuOpen(e, pos)}>
@@ -236,6 +270,21 @@ export default function PositionsPage() {
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
             />
+
+            <TextField
+              select
+              label="PIC (Supervisor/Leader)"
+              fullWidth
+              value={formData.pic_id}
+              onChange={(e) => setFormData({...formData, pic_id: e.target.value})}
+              SelectProps={{ native: true }}
+              InputLabelProps={{ shrink: true }}
+            >
+                <option value="">-- Pilih PIC --</option>
+                {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.full_name}</option>
+                ))}
+            </TextField>
             
             <Divider sx={{ my: 1 }}><Chip label="Data Finansial Standar" size="small" /></Divider>
 
@@ -282,6 +331,24 @@ export default function PositionsPage() {
               value={formatIDR(formData.deduction_bpjs)}
               onChange={(e) => setFormData({...formData, deduction_bpjs: parseIDR(e.target.value)})}
             />
+
+            <Box sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 2 }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>Gunakan Absensi</Typography>
+                  <Typography variant="caption" color="text.secondary">Gunakan data ini untuk sistem presensi & jadwal shift.</Typography>
+                </Box>
+                <Button 
+                  size="small" 
+                  variant={formData.use_presence ? "contained" : "outlined"}
+                  color={formData.use_presence ? "primary" : "inherit"}
+                  onClick={() => setFormData({ ...formData, use_presence: formData.use_presence ? 0 : 1 })}
+                  sx={{ borderRadius: 2, minWidth: 80 }}
+                >
+                  {formData.use_presence ? "Aktif" : "Non-Aktif"}
+                </Button>
+              </Stack>
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>

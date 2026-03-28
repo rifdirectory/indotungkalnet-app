@@ -7,7 +7,7 @@ import {
   Button, TextField, Dialog, DialogTitle, DialogContent, 
   IconButton, Select, MenuItem, FormControl, InputLabel, Divider,
   Card, Autocomplete, CircularProgress, DialogActions,
-  Grid
+  Grid, Checkbox
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { 
@@ -25,7 +25,12 @@ import {
   Close as CloseIcon,
   Edit as EditIcon,
   Phone as PhoneIcon,
-  WhatsApp as WhatsAppIcon
+  WhatsApp as WhatsAppIcon,
+  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
+  CheckBox as CheckBoxIcon,
+  Engineering as EngineeringIcon,
+  Coffee as CoffeeIcon,
+  FiberManualRecord as FiberManualRecordIcon
 } from "@mui/icons-material";
 
 const TimelineItem = ({ label, time, active, isFirst, isLast }: any) => (
@@ -83,17 +88,19 @@ export default function SupportPageContent() {
   const [editForm, setEditForm] = useState({
     category: '',
     priority: '',
-    status: '',
-    description: ''
+    description: '',
+    repair_description: '',
+    assigned_to: [] as string[]
   });
   const [loading, setLoading] = useState(false);
   const [newTicket, setNewTicket] = useState({
     customer_id: '',
     category: 'Perbaikan',
     priority: 'Medium',
+    difficulty: 'Low',
     description: '',
     phone_number: '',
-    assigned_to: ''
+    assigned_to: [] as string[]
   });
   const [filter, setFilter] = useState('today');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -116,6 +123,7 @@ export default function SupportPageContent() {
   const categories = ["Pemasangan Baru", "Installasi Baru", "Perbaikan", "Perubahan Paket", "Pelanggan Berhenti", "Maintenace"];
 
   const [isEditingDesc, setIsEditingDesc] = useState(false);
+  const [isEditingRepair, setIsEditingRepair] = useState(false);
   const [tempDesc, setTempDesc] = useState('');
   const [isSavingDesc, setIsSavingDesc] = useState(false);
 
@@ -140,35 +148,49 @@ export default function SupportPageContent() {
       });
   };
 
+  const fetchTechnicians = async () => {
+    try {
+      let url = `/api/employees?range=${filter}`;
+      if (filter === 'custom' && dateRange.start && dateRange.end) {
+        url += `&startDate=${dateRange.start}&endDate=${dateRange.end}`;
+      } else if (filter === 'today') {
+        // Handled by default in backend or we could pass specific today date
+      }
+      
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.success) {
+        setEmployees(data.data);
+        const techList = data.data.filter((emp: any) => 
+          (emp.position_name?.toLowerCase().includes('teknisi') ||
+           emp.position_name?.toLowerCase().includes('noc')) &&
+          emp.full_name !== 'Wisnu Rachmawan'
+        );
+        setTechnicians(techList);
+      }
+    } catch (error) {
+      console.error('Error fetching technicians:', error);
+    }
+  };
+
   useEffect(() => {
     fetchTickets();
-  }, [filter]);
+    fetchTechnicians();
+  }, [filter, dateRange]);
 
   useEffect(() => {
-    fetch('/api/employees')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) setEmployees(data.data);
-      });
-  }, []);
+    const fetchCustomers = async () => {
+      const res = await fetch('/api/customers');
+      const data = await res.json();
+      if (data.success) setCustomers(data.data);
+    };
 
-  useEffect(() => {
-    fetch('/api/customers')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) setCustomers(data.data);
-      });
-
-    fetch('/api/employees')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          const techList = data.data.filter((emp: any) => 
-            emp.position_name?.toLowerCase().includes('teknisi')
-          );
-          setTechnicians(techList);
-        }
-      });
+    fetchCustomers();
+    fetchTechnicians();
+    
+    // Live Pulse: Update status every 20 seconds
+    const interval = setInterval(fetchTechnicians, 20000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleSubmit = async () => {
@@ -186,7 +208,7 @@ export default function SupportPageContent() {
       const data = await res.json();
       if (data.success) {
         setOpenDialog(false);
-        setNewTicket({ customer_id: '', category: 'Perbaikan', priority: 'Medium', description: '', phone_number: '', assigned_to: '' });
+        setNewTicket({ customer_id: '', category: 'Perbaikan', priority: 'Medium', difficulty: 'Low', description: '', phone_number: '', assigned_to: [] });
         fetchTickets();
       }
     } catch (err) {
@@ -198,12 +220,18 @@ export default function SupportPageContent() {
   
   const handleTicketClick = (ticket: any) => {
     setSelectedTicket(ticket);
-    setEditForm({
-      category: ticket.category,
-      priority: ticket.priority,
-      status: ticket.status,
-      description: ticket.description || ''
-    });
+    const initialAssignees = ticket.assigned_ids ? ticket.assigned_ids.split(',') : [];
+    const initialData = {
+      category: ticket.category || 'Perbaikan',
+      priority: ticket.priority || 'Medium',
+      description: ticket.description || '',
+      repair_description: ticket.repair_description || '',
+      assigned_to: initialAssignees
+    };
+    setEditForm(initialData);
+    setTempDesc(ticket.description || '');
+    setIsEditingDesc(false);
+    setIsEditingRepair(false);
     setDetailOpen(true);
   };
 
@@ -223,8 +251,9 @@ export default function SupportPageContent() {
         setEditForm({
           category: data.ticket.category,
           priority: data.ticket.priority,
-          status: data.ticket.status,
-          description: data.ticket.description || ''
+          description: data.ticket.description || '',
+          repair_description: data.ticket.repair_description || '',
+          assigned_to: data.ticket.assigned_ids ? data.ticket.assigned_ids.split(',') : []
         });
       } else {
         fetchTickets(); 
@@ -236,53 +265,43 @@ export default function SupportPageContent() {
     }
   };
 
-  const handleDescSave = async () => {
-    if (!tempDesc || tempDesc === selectedTicket?.description) {
-      setIsEditingDesc(false);
-      return;
-    }
-
-    setIsSavingDesc(true);
-    try {
-      const res = await fetch(`/api/support/${selectedTicket?.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...editForm, description: tempDesc })
-      });
-      const data = await res.json();
-      if (data.success && data.ticket) {
-        setTickets(prev => prev.map(t => t.id === data.ticket.id ? data.ticket : t));
-        setSelectedTicket(data.ticket);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSavingDesc(false);
-      setIsEditingDesc(false);
-    }
-  };
-
-  const handleAssignChange = async (employeeId: string) => {
+  const handleSaveAll = async () => {
     if (!selectedTicket) return;
-    
+    setLoading(true);
     try {
       const res = await fetch(`/api/support/${selectedTicket.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...selectedTicket,
-          assigned_to: employeeId || null
+          category: editForm.category,
+          priority: editForm.priority,
+          description: editForm.description,
+          repair_description: editForm.repair_description,
+          assigned_to: editForm.assigned_to
         })
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.ticket) {
+        setTickets(prev => prev.map(t => t.id === data.ticket.id ? data.ticket : t));
         setSelectedTicket(data.ticket);
-        fetchTickets();
+        setIsEditingDesc(false);
+        setIsEditingRepair(false);
       }
     } catch (err) {
-      console.error('Failed to update assignment:', err);
+      console.error('Failed to save changes:', err);
+    } finally {
+      setLoading(false);
     }
   };
+
+  const isDirty = selectedTicket && (
+    editForm.category !== selectedTicket.category ||
+    editForm.priority !== selectedTicket.priority ||
+    editForm.description !== (selectedTicket.description || '') ||
+    editForm.repair_description !== (selectedTicket.repair_description || '') ||
+    JSON.stringify(editForm.assigned_to.sort()) !== JSON.stringify((selectedTicket.assigned_ids ? selectedTicket.assigned_ids.split(',') : []).sort())
+  );
 
   return (
     <Box sx={{ p: { xs: 3, md: 5 } }}>
@@ -345,7 +364,10 @@ export default function SupportPageContent() {
             <Button 
               variant="contained" 
               size="small" 
-              onClick={fetchTickets}
+              onClick={() => {
+                fetchTickets();
+                fetchTechnicians();
+              }}
               sx={{ borderRadius: 3, height: 40, px: 3 }}
             >
               Cari
@@ -448,18 +470,16 @@ export default function SupportPageContent() {
                             finishedAt={ticket.finished_at}
                           />
                         </Typography>
-                        {ticket.assigned_name && (
-                          <>
-                            <Box sx={{ width: 3, height: 3, borderRadius: '50%', bgcolor: 'text.disabled' }} />
-                            <Stack direction="row" spacing={0.5} alignItems="center">
-                              <PersonIcon sx={{ fontSize: '0.8rem', color: 'primary.main' }} />
-                              <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.main' }}>
-                                {ticket.assigned_name}
-                              </Typography>
-                            </Stack>
-                          </>
-                        )}
                       </Stack>
+
+                      {ticket.assigned_names && (
+                        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5 }}>
+                          <PersonIcon sx={{ fontSize: '0.85rem', color: 'primary.main', opacity: 0.8 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main', opacity: 0.9, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                            {ticket.assigned_names}
+                          </Typography>
+                        </Stack>
+                      )}
                     </Box>
                   </Stack>
                   
@@ -503,15 +523,70 @@ export default function SupportPageContent() {
             <Card sx={{ p: 3 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', mb: 3 }}>TEKNISI</Typography>
               <Stack spacing={2}>
-                {technicians.map((tech, i) => (
-                  <Stack key={i} direction="row" justifyContent="space-between" alignItems="center">
-                    <Stack direction="row" spacing={1.5} alignItems="center">
-                      <Avatar sx={{ width: 32, height: 32, fontSize: '0.75rem', fontWeight: 700, bgcolor: 'rgba(0, 0, 0, 0.03)', border: '1px solid rgba(0, 0, 0, 0.06)', borderRadius: 3 }}>{tech.full_name?.charAt(0)}</Avatar>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{tech.full_name}</Typography>
+                {technicians.map((tech, i) => {
+                  const isOff = tech.current_status === 'Off';
+                  const isOnSite = tech.current_status === 'On-Site';
+                  const isFree = tech.current_status === 'Free';
+                  
+                  return (
+                    <Stack key={i} direction="row" justifyContent="space-between" alignItems="center">
+                      <Stack direction="row" spacing={1.5} alignItems="center">
+                        <Avatar sx={{ 
+                          width: 32, 
+                          height: 32, 
+                          fontSize: '0.75rem', 
+                          fontWeight: 700, 
+                          bgcolor: isOff ? 'rgba(0, 0, 0, 0.02)' : alpha(isOnSite ? theme.palette.warning.main : theme.palette.success.main, 0.1), 
+                          color: isOff ? 'text.disabled' : (isOnSite ? 'warning.main' : 'success.main'),
+                          border: '1px solid rgba(0, 0, 0, 0.06)', 
+                          borderRadius: 3,
+                          opacity: isOff ? 0.5 : 1
+                        }}>
+                          {tech.full_name?.charAt(0)}
+                        </Avatar>
+                        <Typography variant="body2" sx={{ 
+                          fontWeight: 700, 
+                          color: isOff ? 'text.disabled' : 'text.primary',
+                          transition: 'color 0.3s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1
+                        }}>
+                          {tech.full_name}
+                          {tech.total_field_tasks_filtered > 0 && (
+                            <Box component="span" sx={{ 
+                              fontSize: '0.65rem', 
+                              bgcolor: isOff ? 'rgba(0,0,0,0.1)' : (isOnSite ? 'warning.main' : 'success.main'), 
+                              color: isOff ? 'text.disabled' : 'white', 
+                              px: 0.8, 
+                              py: 0.2, 
+                              borderRadius: 1,
+                              fontWeight: 900
+                            }}>
+                              {tech.total_field_tasks_filtered}
+                            </Box>
+                          )}
+                        </Typography>
+                      </Stack>
+                      
+                      <Stack direction="row" spacing={0.5} alignItems="center">
+                        {isOnSite && <EngineeringIcon sx={{ fontSize: '1rem', color: 'warning.main' }} />}
+                        {isFree && <CoffeeIcon sx={{ fontSize: '1rem', color: 'success.main' }} />}
+                        {isOff && <FiberManualRecordIcon sx={{ fontSize: '0.6rem', color: 'text.disabled' }} />}
+                        
+                        <Typography variant="caption" sx={{ 
+                          fontWeight: 900, 
+                          color: isOnSite ? 'warning.main' : (isFree ? 'success.main' : 'text.disabled'), 
+                          textTransform: 'uppercase',
+                          fontSize: '0.65rem',
+                          letterSpacing: 0.5
+                        }}>
+                          {tech.current_status || 'Off'}
+                        </Typography>
+                      </Stack>
                     </Stack>
-                    <Typography variant="caption" sx={{ fontWeight: 800, color: tech.status === 'active' ? 'success.main' : 'warning.main', textTransform: 'capitalize' }}>{tech.status || 'Active'}</Typography>
-                  </Stack>
-                ))}
+                  );
+                })}
                 {technicians.length === 0 && (
                   <Typography variant="caption" color="text.secondary">Tidak ada teknisi standby.</Typography>
                 )}
@@ -565,7 +640,7 @@ export default function SupportPageContent() {
                 isOptionEqualToValue={(option, value) => option.id === value.id}
                 onChange={(_, value) => setNewTicket({ ...newTicket, customer_id: value ? value.id : '', phone_number: value ? value.phone_number : '' })}
                 renderOption={(props, option) => {
-                  const { ...optionProps } = props as any;
+                  const { key, ...optionProps } = props as any;
                   return (
                     <Box key={option.id} component="li" {...optionProps}>
                       <Stack>
@@ -586,32 +661,33 @@ export default function SupportPageContent() {
               onChange={(e) => setNewTicket({ ...newTicket, phone_number: e.target.value })}
               placeholder="0812xxxx (Opsional jika sudah ada di data pelanggan)"
             />
-            <FormControl fullWidth>
-              <InputLabel>Petugas (Asign To)</InputLabel>
-              <Select
-                value={newTicket.assigned_to}
-                label="Petugas (Asign To)"
-                onChange={(e) => setNewTicket({ ...newTicket, assigned_to: e.target.value })}
-              >
-                <MenuItem value=""><em>Belum Ditentukan</em></MenuItem>
-                {employees.map(emp => (
-                  <MenuItem key={emp.id} value={emp.id}>{emp.full_name} ({emp.position_name})</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Stack direction="row" spacing={2}>
+              <FormControl fullWidth>
+                <InputLabel>Prioritas</InputLabel>
+                <Select
+                  value={newTicket.priority}
+                  label="Prioritas"
+                  onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}
+                >
+                  <MenuItem value="High">High</MenuItem>
+                  <MenuItem value="Medium">Medium</MenuItem>
+                  <MenuItem value="Low">Low</MenuItem>
+                </Select>
+              </FormControl>
 
-            <FormControl fullWidth>
-              <InputLabel>Prioritas</InputLabel>
-              <Select
-                value={newTicket.priority}
-                label="Prioritas"
-                onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}
-              >
-                <MenuItem value="High">High</MenuItem>
-                <MenuItem value="Medium">Medium</MenuItem>
-                <MenuItem value="Low">Low</MenuItem>
-              </Select>
-            </FormControl>
+              <FormControl fullWidth>
+                <InputLabel>Tingkat Kesulitan</InputLabel>
+                <Select
+                  value={newTicket.difficulty}
+                  label="Tingkat Kesulitan"
+                  onChange={(e) => setNewTicket({ ...newTicket, difficulty: e.target.value })}
+                >
+                  <MenuItem value="High">High (Sulit)</MenuItem>
+                  <MenuItem value="Medium">Medium (Sedang)</MenuItem>
+                  <MenuItem value="Low">Low (Mudah)</MenuItem>
+                </Select>
+              </FormControl>
+            </Stack>
 
             <TextField 
               label="Detail Deskripsi" 
@@ -646,339 +722,394 @@ export default function SupportPageContent() {
       >
         {selectedTicket && (
           <>
-            <DialogTitle sx={{ 
-              p: 0,
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-              bgcolor: alpha(theme.palette.primary.main, 0.01)
-            }}>
-              <Box sx={{ px: 4, py: 2.5 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                  <Box sx={{ flexGrow: 1, mr: 3 }}>
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                      <Chip 
-                        label={`#${selectedTicket.id}`} 
-                        size="small" 
-                        sx={{ fontWeight: 800, bgcolor: 'primary.main', color: 'white', borderRadius: 1 }} 
-                      />
-                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>
-                        Ticket Details
-                      </Typography>
-                    </Stack>
-                    
-                    <Box sx={{ mt: 1 }}>
-                      <Typography variant="h5" sx={{ 
-                        fontWeight: 800, 
-                        color: (selectedTicket.category === 'Maintenace' || selectedTicket.category === 'Installasi Baru') ? 'secondary.main' : 'text.primary', 
-                        textTransform: (selectedTicket.category === 'Maintenace' || selectedTicket.category === 'Installasi Baru') ? 'uppercase' : 'none',
-                        mb: 0.5,
-                        lineHeight: 1.3
-                      }}>
-                        {selectedTicket.customer_name}
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 800, color: '#10b981', mb: 0.5, letterSpacing: '0.04em' }}>
-                        pppoe : {selectedTicket.pppoe_username || '-'}
-                      </Typography>
-                      {selectedTicket.phone_number && (
-                        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1.5 }}>
-                          <Box 
-                            component="a" 
-                            href={`tel:${selectedTicket.phone_number}`}
-                            sx={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: 0.5, 
-                              color: 'text.secondary', 
-                              textDecoration: 'none',
-                              '&:hover': { color: 'primary.main' }
-                            }}
-                          >
-                            <PhoneIcon sx={{ fontSize: '0.9rem' }} />
-                            <Typography variant="caption" sx={{ fontWeight: 700 }}>{selectedTicket.phone_number}</Typography>
-                          </Box>
-                          <Box 
-                            component="a" 
-                            href={`https://wa.me/${selectedTicket.phone_number.startsWith('0') ? '62' + selectedTicket.phone_number.slice(1) : selectedTicket.phone_number}`}
-                            target="_blank"
-                            sx={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: 0.5, 
-                              color: 'success.main', 
-                              textDecoration: 'none',
-                              '&:hover': { opacity: 0.8 }
-                            }}
-                          >
-                            <WhatsAppIcon sx={{ fontSize: '0.9rem' }} />
-                            <Typography variant="caption" sx={{ fontWeight: 700 }}>WhatsApp</Typography>
-                          </Box>
-                        </Stack>
-                      )}
-                   <Stack direction="row" spacing={1}>
-                        <Chip 
-                          icon={<LabelIcon sx={{ fontSize: '1rem !important' }} />}
-                          label={selectedTicket.category} 
-                          size="small" 
-                          sx={{ fontWeight: 700, borderRadius: 1.5, bgcolor: alpha(theme.palette.secondary.main, 0.08), color: 'secondary.main', px: 0.5, height: 24 }} 
-                        />
-                        <Chip 
-                          icon={<PriorityIcon sx={{ fontSize: '1rem !important' }} />}
-                          label={selectedTicket.priority} 
-                          size="small" 
-                          color={selectedTicket.priority === 'High' ? 'error' : 'default'}
-                          variant={selectedTicket.priority === 'High' ? 'filled' : 'outlined'}
-                          sx={{ fontWeight: 700, borderRadius: 1.5, px: 0.5, height: 24 }} 
-                        />
-                        
-                        <FormControl size="small" sx={{ minWidth: 150 }}>
-                          <Select
-                            value={selectedTicket.assigned_to || ''}
-                            onChange={(e) => handleAssignChange(e.target.value)}
-                            displayEmpty
-                            sx={{ 
-                              height: 24, 
-                              fontSize: '0.7rem', 
-                              fontWeight: 700,
-                              borderRadius: 1.5,
-                              bgcolor: alpha(theme.palette.info.main, 0.08),
-                              color: 'info.main',
-                              '& .MuiSelect-select': { py: 0, px: 1, display: 'flex', alignItems: 'center', gap: 0.5 },
-                              '& fieldset': { border: 'none' }
-                            }}
-                            renderValue={(value) => (
-                              <Stack direction="row" spacing={0.5} alignItems="center">
-                                <PersonIcon sx={{ fontSize: '0.9rem' }} />
-                                <span>Petugas: {employees.find(e => e.id === value)?.full_name || 'Belum Ditentukan'}</span>
-                              </Stack>
-                            )}
-                          >
-                            <MenuItem value=""><em>Belum Ditentukan</em></MenuItem>
-                            {employees.map(emp => (
-                              <MenuItem key={emp.id} value={emp.id} sx={{ fontSize: '0.75rem', fontWeight: 600 }}>
-                                {emp.full_name} ({emp.position_name})
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Stack>
-                    </Box>
-                  </Box>
-                  <Stack direction="row" spacing={3} alignItems="center">
-                    <Box sx={{ textAlign: 'right' }}>
-                      <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.disabled', display: 'block', mb: 0.8, fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.15em', opacity: 0.6 }}>TICKET STATUS</Typography>
-                      <Box sx={{ 
-                        px: 2, 
-                        py: 0.8, 
-                        bgcolor: alpha(
-                          selectedTicket.status === 'Open' ? '#f59e0b' : 
-                          selectedTicket.status === 'OTW' ? '#6366f1' :
-                          selectedTicket.status === 'Sedang Dikerjakan' ? '#3b82f6' : 
-                          selectedTicket.status === 'Selesai' ? '#10b981' : 
-                          '#10b981', 
-                          0.08
-                        ),
-                        borderRadius: 2.5,
-                        border: '1.5px solid',
-                        borderColor: alpha(
-                          selectedTicket.status === 'Open' ? '#f59e0b' : 
-                          selectedTicket.status === 'OTW' ? '#6366f1' :
-                          selectedTicket.status === 'Sedang Dikerjakan' ? '#3b82f6' : 
-                          selectedTicket.status === 'Selesai' ? '#10b981' : 
-                          '#10b981', 
-                          0.15
-                        ),
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1.2
-                      }}>
-                        <Box sx={{ 
-                          width: 8, 
-                          height: 8, 
-                          borderRadius: '50%', 
-                          bgcolor: 
-                            selectedTicket.status === 'Open' ? '#f59e0b' : 
-                            selectedTicket.status === 'OTW' ? '#6366f1' :
-                            selectedTicket.status === 'Sedang Dikerjakan' ? '#3b82f6' : 
-                            selectedTicket.status === 'Selesai' ? '#10b981' : 
-                            '#10b981',
-                          boxShadow: `0 0 10px ${alpha(
-                            selectedTicket.status === 'Open' ? '#f59e0b' : 
-                            selectedTicket.status === 'OTW' ? '#6366f1' :
-                            selectedTicket.status === 'Sedang Dikerjakan' ? '#3b82f6' : 
-                            selectedTicket.status === 'Selesai' ? '#10b981' : 
-                            '#10b981', 
-                            0.5
-                          )}`
-                        }} />
-                        <Typography variant="body2" sx={{ 
-                          fontWeight: 900, 
-                          color: 
-                            selectedTicket.status === 'Open' ? '#f59e0b' : 
-                            selectedTicket.status === 'OTW' ? '#6366f1' :
-                            selectedTicket.status === 'Sedang Dikerjakan' ? '#3b82f6' : 
-                            selectedTicket.status === 'Selesai' ? '#10b981' : 
-                            '#10b981',
-                          letterSpacing: '0.04em', 
-                          fontSize: '0.85rem',
-                          textTransform: 'uppercase'
-                        }}>
-                          {selectedTicket.status}
-                        </Typography>
-                      </Box>
-                    </Box>
-                    <IconButton onClick={() => setDetailOpen(false)} sx={{ 
-                      color: 'text.disabled', 
-                      mt: -2.5,
-                      mr: -1,
-                      '&:hover': { color: '#ef4444', bgcolor: alpha('#ef4444', 0.05) },
-                      transition: 'all 0.2s ease'
-                    }}>
-                      <CloseIcon />
-                    </IconButton>
+            <DialogTitle sx={{ p: 4, pb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <Box sx={{ flexGrow: 1 }}>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.disabled', letterSpacing: 2, display: 'block', mb: 1 }}>
+                  #{selectedTicket.id} &nbsp; TICKET DETAILS & ASSIGNMENT
+                </Typography>
+                <Typography variant="h4" sx={{ fontWeight: 900, color: 'text.primary', letterSpacing: '-0.02em', mb: 1 }}>
+                  {selectedTicket.customer_name}
+                </Typography>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Chip 
+                    label={`PPPOE: ${selectedTicket.pppoe_username || '-'}`} 
+                    size="small" 
+                    sx={{ fontWeight: 700, bgcolor: alpha(theme.palette.success.main, 0.05), color: 'success.main', borderRadius: 1.5 }} 
+                  />
+                  <Stack 
+                    direction="row" 
+                    spacing={1} 
+                    alignItems="center" 
+                    component="a"
+                    href={`https://wa.me/${selectedTicket.phone_number?.replace(/\D/g, '').startsWith('0') ? '62' + selectedTicket.phone_number.replace(/\D/g, '').slice(1) : selectedTicket.phone_number?.replace(/\D/g, '')}`}
+                    target="_blank"
+                    sx={{ 
+                      textDecoration: 'none',
+                      color: '#25D366', 
+                      bgcolor: alpha('#25D366', 0.08),
+                      px: 1.5,
+                      py: 0.5,
+                      borderRadius: 2,
+                      transition: 'all 0.2s',
+                      '&:hover': { bgcolor: alpha('#25D366', 0.15) }
+                    }}
+                  >
+                    <WhatsAppIcon sx={{ fontSize: '1.1rem' }} />
+                    <Typography variant="body2" sx={{ fontWeight: 800, letterSpacing: 0.5, color: '#15803d' }}>
+                      {selectedTicket.phone_number || '-'}
+                    </Typography>
                   </Stack>
                 </Stack>
               </Box>
+
+              <Stack direction="row" spacing={2} alignItems="center">
+                <FormControl size="small" sx={{ minWidth: 140 }}>
+                  <Select
+                    value={editForm.category}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, category: e.target.value }))}
+                    disabled={selectedTicket.status === 'Selesai'}
+                    sx={{ fontWeight: 800, borderRadius: 2, bgcolor: '#f8fafc', '& fieldset': { borderColor: 'divider' } }}
+                  >
+                    {categories.map(cat => <MenuItem key={cat} value={cat}>{cat}</MenuItem>)}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <Select
+                    value={editForm.priority}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, priority: e.target.value }))}
+                    disabled={selectedTicket.status === 'Selesai'}
+                    sx={{ 
+                      fontWeight: 800, 
+                      borderRadius: 2, 
+                      bgcolor: editForm.priority === 'High' ? alpha(theme.palette.error.main, 0.05) : '#f8fafc',
+                      color: editForm.priority === 'High' ? 'error.main' : 'text.primary',
+                      '& fieldset': { borderColor: 'divider' }
+                    }}
+                  >
+                    <MenuItem value="Low">Low</MenuItem>
+                    <MenuItem value="Medium">Medium</MenuItem>
+                    <MenuItem value="High">High</MenuItem>
+                  </Select>
+                </FormControl>
+
+
+                <IconButton onClick={() => setDetailOpen(false)} sx={{ ml: 1 }}>
+                  <CloseIcon />
+                </IconButton>
+              </Stack>
             </DialogTitle>
             
             <DialogContent sx={{ p: 0 }}>
-              <Grid container>
-                {/* Main Content Area */}
-                <Grid size={{ xs: 12, md: 8 }} sx={{ p: 4, borderRight: { md: '1px solid' }, borderColor: 'divider' }}>
-                  <Stack spacing={4}>
+              <Grid container sx={{ minHeight: 450 }}>
+                {/* 1. PENUGASAN TIM (Left) */}
+                <Grid size={{ xs: 12, md: 3.8 }} sx={{ p: 4 }}>
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.disabled', letterSpacing: 2, textTransform: 'uppercase', display: 'block', mb: 2 }}>
+                      PENUGASAN TIM TEKNISI
+                    </Typography>
+                    <Autocomplete
+                      multiple
+                      size="small"
+                      options={technicians}
+                      disabled={selectedTicket.status === 'Selesai'}
+                      getOptionLabel={(option) => option.id ? option.full_name : ''}
+                      isOptionEqualToValue={(option, value) => option.id === value.id}
+                      value={employees.filter(e => (editForm.assigned_to || []).includes(e.id.toString()))}
+                      onChange={(_, value) => setEditForm(prev => ({ ...prev, assigned_to: value.map(v => v.id.toString()) }))}
+                      renderTags={() => null}
+                      renderOption={(props, option, { selected }) => {
+                        const { key, ...optionProps } = props;
+                        return (
+                          <li key={option.id} {...optionProps}>
+                            <Checkbox
+                              icon={<CheckBoxOutlineBlankIcon fontSize="small" />}
+                              checkedIcon={<CheckBoxIcon fontSize="small" />}
+                              style={{ marginRight: 8 }}
+                              checked={selected}
+                            />
+                            {option.full_name} ({option.position_name})
+                          </li>
+                        );
+                      }}
+                      renderInput={(params) => (
+                        <TextField 
+                          {...params} 
+                          placeholder="Cari & Pilih Teknisi..." 
+                          variant="outlined"
+                          sx={{ 
+                            '& .MuiOutlinedInput-root': { 
+                              bgcolor: 'white', 
+                              borderRadius: 3,
+                              '& fieldset': { borderColor: 'divider' },
+                              px: 2
+                            }
+                          }}
+                        />
+                      )}
+                    />
+
+                    {/* VERTICAL LIST OF TECHNICIANS */}
+                    <Stack spacing={1} sx={{ mt: 2, minHeight: 120 }}>
+                      {editForm.assigned_to.length > 0 ? (
+                        editForm.assigned_to.map((empId) => {
+                          const emp = employees.find(e => e.id.toString() === empId);
+                          if (!emp) return null;
+                          return (
+                            <Paper 
+                              key={emp.id}
+                              elevation={0}
+                              sx={{ 
+                                p: 1.5, 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'space-between',
+                                bgcolor: alpha(theme.palette.primary.main, 0.03),
+                                borderRadius: 2.5,
+                                border: '1px solid',
+                                borderColor: alpha(theme.palette.primary.main, 0.08)
+                              }}
+                            >
+                              <Stack direction="row" spacing={1.5} alignItems="center">
+                                <Avatar 
+                                  sx={{ 
+                                    width: 32, 
+                                    height: 32, 
+                                    fontSize: '0.8rem', 
+                                    fontWeight: 900,
+                                    bgcolor: 'primary.main'
+                                  }}
+                                >
+                                  {emp.full_name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                                </Avatar>
+                                <Box>
+                                  <Typography variant="body2" sx={{ fontWeight: 900, color: 'text.primary' }}>
+                                    {emp.full_name}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                    {emp.position_name || 'Teknisi'}
+                                  </Typography>
+                                </Box>
+                              </Stack>
+                              {selectedTicket.status !== 'Selesai' && (
+                                <IconButton 
+                                  size="small" 
+                                  color="error" 
+                                  onClick={() => setEditForm(prev => ({ 
+                                    ...prev, 
+                                    assigned_to: prev.assigned_to.filter(id => id !== empId) 
+                                  }))}
+                                >
+                                  <CloseIcon sx={{ fontSize: '1rem' }} />
+                                </IconButton>
+                              )}
+                            </Paper>
+                          );
+                        })
+                      ) : (
+                        <Box sx={{ 
+                          py: 4, 
+                          textAlign: 'center', 
+                          border: '2px dashed', 
+                          borderColor: 'divider', 
+                          borderRadius: 3,
+                          color: 'text.disabled'
+                        }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>Belum ada teknisi ditugaskan</Typography>
+                        </Box>
+                      )}
+                    </Stack>
+                  </Box>
+                </Grid>
+
+                {/* 2. DISKRIPSI UNIT (Middle) */}
+                <Grid size={{ xs: 12, md: 5.2 }} sx={{ p: 4, borderLeft: '1px solid', borderColor: 'divider', bgcolor: '#fcfdfe' }}>
+                  <Stack spacing={3}>
+                    {/* COMPLAINT DESCRIPTION */}
                     <Box>
-                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                        <TaskIcon sx={{ color: 'text.secondary', fontSize: '1.2rem' }} />
-                        <Typography variant="subtitle2" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase' }}>
-                          Deskripsi Keluhan
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                        <Box sx={{ width: 28, height: 28, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'primary.main' }}>
+                          <MessageIcon sx={{ fontSize: '1rem' }} />
+                        </Box>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 900, color: 'text.primary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+                          DESKRIPSI KELUHAN
                         </Typography>
-                        {isSavingDesc && (
-                          <Typography variant="caption" sx={{ color: 'primary.main', fontStyle: 'italic', ml: 2 }}>
-                            Menyimpan...
-                          </Typography>
-                        )}
                       </Stack>
                       
                       {isEditingDesc ? (
                         <TextField
                           fullWidth
                           multiline
-                          rows={8}
-                          value={tempDesc}
-                          onChange={(e) => setTempDesc(e.target.value)}
-                          onBlur={() => handleDescSave()}
+                          rows={6}
+                          value={editForm.description}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
                           autoFocus
                           sx={{ 
-                            '& .MuiOutlinedInput-root': { bgcolor: '#fbfbfb', borderRadius: 3 }
+                            '& .MuiOutlinedInput-root': { bgcolor: '#fcfdfe', borderRadius: 4, p: 2, fontSize: '0.95rem', lineHeight: 1.5 }
                           }}
-                          placeholder="Describe the issue in detail..."
                         />
                       ) : (
                         <Paper 
-                          variant="outlined" 
+                          elevation={0}
                           sx={{ 
-                            p: 3, 
-                            bgcolor: '#fbfbfb', 
-                            borderRadius: 3, 
-                            borderStyle: 'dashed',
+                            p: 2.5, 
+                            bgcolor: '#fcfdfe', 
+                            borderRadius: 4, 
+                            border: '1px solid',
+                            borderColor: 'divider',
                             position: 'relative',
-                            '&:hover': { bgcolor: '#f5f5f5', cursor: 'pointer' }
+                            minHeight: 180,
+                            transition: 'all 0.2s',
+                            '&:hover': selectedTicket.status === 'Selesai' ? {} : { bgcolor: 'white', borderColor: 'primary.main', cursor: 'pointer' }
                           }}
-                          onClick={() => {
-                            setTempDesc(selectedTicket.description || '');
-                            setIsEditingDesc(true);
-                          }}
+                          onClick={() => selectedTicket.status !== 'Selesai' && setIsEditingDesc(true)}
                         >
-                          <IconButton 
-                            size="small" 
-                            sx={{ 
-                              position: 'absolute', 
-                              top: 8, 
-                              right: 8, 
-                              color: 'text.secondary',
-                              opacity: 0.6,
-                              '&:hover': { opacity: 1, color: 'primary.main' }
-                            }}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', color: 'text.primary', lineHeight: 1.7, fontSize: '0.95rem', pr: 4 }}>
-                            {selectedTicket.description || "Tidak ada deskripsi rinci disediakan."}
+                          {selectedTicket.status !== 'Selesai' && (
+                            <IconButton size="small" sx={{ position: 'absolute', top: 12, right: 12, bgcolor: 'white', border: '1px solid', borderColor: 'divider' }}>
+                              <EditIcon sx={{ fontSize: '0.9rem' }} />
+                            </IconButton>
+                          )}
+                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: 'text.primary', lineHeight: 1.6, fontWeight: 500 }}>
+                            {editForm.description || "Klik untuk menambah deskripsi..."}
+                          </Typography>
+                        </Paper>
+                      )}
+                    </Box>
+
+                    {/* REPAIR DESCRIPTION (New Section) */}
+                    <Box>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                        <Box sx={{ width: 28, height: 28, borderRadius: 2, bgcolor: alpha(theme.palette.success.main, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'success.main' }}>
+                          <TaskIcon sx={{ fontSize: '1rem' }} />
+                        </Box>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 900, color: 'text.primary', letterSpacing: '-0.01em', textTransform: 'uppercase' }}>
+                          KETERANGAN PERBAIKAN
+                        </Typography>
+                      </Stack>
+                      
+                      {isEditingRepair ? (
+                        <TextField
+                          fullWidth
+                          multiline
+                          rows={10}
+                          value={editForm.repair_description}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, repair_description: e.target.value }))}
+                          autoFocus
+                          placeholder="Tuliskan keterangan perbaikan di sini..."
+                          sx={{ 
+                            '& .MuiOutlinedInput-root': { bgcolor: '#fcfdfe', borderRadius: 4, p: 2, fontSize: '0.95rem', lineHeight: 1.5 }
+                          }}
+                        />
+                      ) : (
+                        <Paper 
+                          elevation={0}
+                          sx={{ 
+                            p: 2.5, 
+                            bgcolor: alpha(theme.palette.success.main, 0.02), 
+                            borderRadius: 4, 
+                            border: '1px solid',
+                            borderColor: editForm.repair_description ? alpha(theme.palette.success.main, 0.2) : 'divider',
+                            position: 'relative',
+                            minHeight: 250,
+                            transition: 'all 0.2s',
+                            '&:hover': selectedTicket.status === 'Selesai' ? {} : { bgcolor: 'white', borderColor: theme.palette.success.main, cursor: 'pointer' }
+                          }}
+                          onClick={() => selectedTicket.status !== 'Selesai' && setIsEditingRepair(true)}
+                        >
+                          {selectedTicket.status !== 'Selesai' && (
+                            <IconButton size="small" sx={{ position: 'absolute', top: 12, right: 12, bgcolor: 'white', border: '1px solid', borderColor: 'divider' }}>
+                              <EditIcon sx={{ fontSize: '0.9rem' }} />
+                            </IconButton>
+                          )}
+                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: editForm.repair_description ? 'text.primary' : 'text.disabled', lineHeight: 1.6, fontWeight: 500 }}>
+                            {editForm.repair_description || "Klik untuk menuliskan keterangan penanganan & perbaikan..."}
                           </Typography>
                         </Paper>
                       )}
                     </Box>
                   </Stack>
                 </Grid>
-                
-                {/* Sidebar Area */}
-                <Grid size={{ xs: 12, md: 4 }} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.01) }}>
-                  <Box sx={{ p: 4 }}>
-                    <Typography variant="overline" sx={{ fontWeight: 900, mb: 3, color: 'text.secondary', letterSpacing: '0.1em', display: 'block' }}>Rincian Tiket</Typography>
-                    
-                    <Stack spacing={4}>
-                      {/* Timeline / History */}
+
+                {/* 3. DURASI & TIMELINE (Right) */}
+                <Grid size={{ xs: 12, md: 3 }} sx={{ p: 4, borderLeft: '1px solid', borderColor: 'divider' }}>
+                  <Box sx={{ mb: 4 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.disabled', letterSpacing: 2, textTransform: 'uppercase', display: 'block', mb: 3 }}>
+                      DURASI AKTIF
+                    </Typography>
+                    <Stack direction="row" alignItems="center" spacing={2} sx={{ bgcolor: alpha(theme.palette.success.main, 0.06), p: 2, borderRadius: 3, border: '1px solid', borderColor: alpha(theme.palette.success.main, 0.1) }}>
+                      <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'success.main', color: 'white', display: 'flex' }}>
+                        <ClockIcon sx={{ fontSize: '1.2rem' }} />
+                      </Box>
                       <Box>
-                        <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
-                          <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>TIMELINE PROGRESS</Typography>
-                          <Typography 
-                            sx={{ 
-                              fontWeight: 900, 
-                              fontSize: '0.95rem',
-                              color: 'success.main'
-                            }} 
-                          >
-                            <LiveTimer 
-                              createdAt={selectedTicket.created_at}
-                              createdTimeStr={selectedTicket.created_time_str}
-                              status={selectedTicket.status}
-                              finishedAt={selectedTicket.finished_at}
-                            />
-                          </Typography>
-                        </Stack>
-                        <Stack spacing={0}>
-                          <TimelineItem label="Laporan Masuk" time={formatWIB(selectedTicket.created_at)} active isFirst />
-                          <TimelineItem label="OTW ke Lokasi" time={formatWIB(selectedTicket.otw_at)} active={!!selectedTicket.otw_at} />
-                          <TimelineItem label="Mulai Dikerjakan" time={formatWIB(selectedTicket.working_at)} active={!!selectedTicket.working_at} />
-                          <TimelineItem label="Sudah Diperbaiki" time={formatWIB(selectedTicket.resolved_at)} active={!!selectedTicket.resolved_at} />
-                          <TimelineItem label="Selesai / Ditutup" time={formatWIB(selectedTicket.finished_at)} active={!!selectedTicket.finished_at} isLast />
-                        </Stack>
+                        <Typography variant="caption" sx={{ fontWeight: 800, color: 'success.main', display: 'block', opacity: 0.8 }}>ESTIMASI PENANGANAN</Typography>
+                        <Typography sx={{ fontWeight: 900, fontSize: '1.25rem', color: 'success.dark', letterSpacing: 1 }}>
+                          <LiveTimer 
+                            createdAt={selectedTicket.created_at}
+                            createdTimeStr={selectedTicket.created_time_str}
+                            status={selectedTicket.status}
+                            finishedAt={selectedTicket.finished_at}
+                          />
+                        </Typography>
                       </Box>
                     </Stack>
                   </Box>
+
+                  <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.disabled', letterSpacing: 2, textTransform: 'uppercase', display: 'block', mb: 3 }}>
+                    TIMELINE STATUS
+                  </Typography>
+                  <Stack spacing={0}>
+                    <TimelineItem label="LAPORAN MASUK" time={formatWIB(selectedTicket.created_at)} active isFirst />
+                    <TimelineItem label="OTW KE LOKASI" time={formatWIB(selectedTicket.otw_at)} active={!!selectedTicket.otw_at} />
+                    <TimelineItem label="MULAI DIKERJAKAN" time={formatWIB(selectedTicket.working_at)} active={!!selectedTicket.working_at} />
+                    <TimelineItem label="SUDAH DIPERBAIKI" time={formatWIB(selectedTicket.resolved_at)} active={!!selectedTicket.resolved_at} />
+                    <TimelineItem label="TICKET CLOSED" time={formatWIB(selectedTicket.finished_at)} active={!!selectedTicket.finished_at} isLast />
+                  </Stack>
                 </Grid>
               </Grid>
             </DialogContent>
-            {selectedTicket.status !== 'Selesai' && (
-              <DialogActions sx={{ p: 3, borderTop: '1px solid', borderColor: 'divider', bgcolor: alpha(theme.palette.primary.main, 0.01) }}>
+            
+            <Box sx={{ p: 2, px: 4, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'white', display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+              {isDirty && (
                 <Button 
-                  variant="contained"
-                  color={
-                    selectedTicket.status === 'Open' ? 'info' :
-                    selectedTicket.status === 'OTW' ? 'primary' :
-                    selectedTicket.status === 'Sedang Dikerjakan' ? 'warning' :
-                    'success'
-                  }
+                  variant="contained" 
+                  color="primary"
+                  onClick={handleSaveAll}
+                  disabled={loading}
+                  startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
+                  sx={{ height: 42, px: 4, borderRadius: 2.5, fontWeight: 900, letterSpacing: 1 }}
+                >
+                  SIMPAN PERUBAHAN
+                </Button>
+              )}
+              
+              {selectedTicket.status !== 'Selesai' && (
+                <Button 
+                  variant="outlined"
                   onClick={() => handleStatusUpdate(
                     selectedTicket.status === 'Open' ? 'OTW' :
                     selectedTicket.status === 'OTW' ? 'Sedang Dikerjakan' :
-                    selectedTicket.status === 'Sedang Dikerjakan' ? 'Sudah Diperbaiki' :
+                    selectedTicket.status === 'Sedang Dikerjakan' ? 'Resolved' :
                     'Selesai'
                   )}
                   sx={{ 
-                    fontWeight: 800, 
-                    borderRadius: 2,
-                    px: 3,
-                    boxShadow: 'none',
-                    '&:hover': { boxShadow: 'none' }
+                    height: 42,
+                    px: 4,
+                    borderRadius: 2.5,
+                    fontWeight: 900, 
+                    fontSize: '0.85rem',
+                    letterSpacing: 1.2,
+                    borderColor: 'divider'
                   }}
                 >
-                  {selectedTicket.status === 'Open' ? 'OTW ke Lokasi' :
-                   selectedTicket.status === 'OTW' ? 'Mulai Kerjakan' :
-                   selectedTicket.status === 'Sedang Dikerjakan' ? 'Selesai Perbaikan' :
-                   'Selesaikan Tiket'}
+                  {
+                    selectedTicket.status === 'Open' ? 'OTW KE LOKASI' :
+                    selectedTicket.status === 'OTW' ? 'MULAI KERJAKAN' :
+                    selectedTicket.status === 'Sedang Dikerjakan' ? 'TANDAI SELESAI' :
+                    selectedTicket.status === 'Resolved' ? 'TUTUP TIKET' : 'PROSES'
+                  }
                 </Button>
-              </DialogActions>
-            )}
+              )}
+            </Box>
             {selectedTicket.status === 'Selesai' && (
               <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }} />
             )}

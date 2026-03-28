@@ -6,7 +6,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const { 
       name, basic_salary, allowance_pos, allowance_trans, 
-      allowance_meal, allowance_presence, deduction_bpjs 
+      allowance_meal, allowance_presence, deduction_bpjs,
+      use_presence, pic_id
     } = await request.json();
     await db.query(`
       UPDATE positions SET 
@@ -16,11 +17,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         allowance_trans = ?, 
         allowance_meal = ?, 
         allowance_presence = ?, 
-        deduction_bpjs = ? 
+        deduction_bpjs = ?,
+        use_presence = ?,
+        pic_id = ?
       WHERE id = ?
     `, [
       name, basic_salary || 0, allowance_pos || 0, allowance_trans || 0, 
       allowance_meal || 0, allowance_presence || 0, deduction_bpjs || 0, 
+      use_presence !== undefined ? use_presence : 1,
+      pic_id || null,
       id
     ]);
     return NextResponse.json({ success: true, message: 'Position updated successfully' });

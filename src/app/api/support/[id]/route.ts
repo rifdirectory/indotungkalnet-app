@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getJakartaNow } from '@/lib/dateUtils';
+import { sendExpoPushNotification } from '@/lib/notifications';
 
 export async function PUT(
   req: Request,
@@ -9,11 +10,11 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { category, priority, status, description, assigned_to } = body;
+    const { category, priority, status, description, repair_description, assigned_to } = body;
 
     let timestampField = '';
     const nowStr = getJakartaNow();
-    const queryParams: any[] = [category, priority, status, description, assigned_to || null];
+    const queryParams: any[] = [category, priority, status, description, repair_description];
     
     if (status === 'OTW') timestampField = ', otw_at = ?';
     else if (status === 'Sedang Dikerjakan') timestampField = ', working_at = ?';
@@ -25,18 +26,68 @@ export async function PUT(
 
     const query = `
       UPDATE support_tickets 
-      SET category = ?, priority = ?, status = ?, description = ?, assigned_to = ?${timestampField} 
+      SET category = ?, priority = ?, status = ?, description = ?, repair_description = ?${timestampField} 
       WHERE id = ?
     `;
 
     await db.query(query, queryParams);
 
+    // Sync multi-assignees and identify NEW ones for notification
+    if (Array.isArray(assigned_to)) {
+      // 1. Get current assignees before update
+      const oldRows: any = await db.query('SELECT employee_id FROM ticket_assignees WHERE ticket_id = ?', [id]);
+      const oldIds = oldRows.map((r: any) => r.employee_id.toString());
+      
+      // 2. Identify new IDs that were NOT in oldIds
+      const newIds = assigned_to.filter(empId => empId && !oldIds.includes(empId.toString()));
+
+      // 3. Perform sync (DELETE then INSERT)
+      await db.query('DELETE FROM ticket_assignees WHERE ticket_id = ?', [id]);
+      for (const empId of assigned_to) {
+        if (empId) {
+          await db.query('INSERT IGNORE INTO ticket_assignees (ticket_id, employee_id) VALUES (?, ?)', [id, empId]);
+        }
+      }
+
+      // 4. Trigger Notifications for NEW assignees
+      if (newIds.length > 0) {
+        try {
+          // Fetch names and tokens for new assignees
+          const employeesToNotify: any = await db.query(
+            'SELECT id, full_name, push_token FROM employees WHERE id IN (?) AND push_token IS NOT NULL',
+            [newIds]
+          );
+
+          if (employeesToNotify.length > 0) {
+            const tokens = employeesToNotify.map((e: any) => e.push_token);
+            const ticketSummary: any = await db.query('SELECT customer_name FROM support_tickets WHERE id = ?', [id]);
+            const customerName = ticketSummary[0]?.customer_name || 'Pelanggan';
+
+            await sendExpoPushNotification(
+              tokens,
+              'Penugasan Tiket Baru 🛠️',
+              `Halo! Anda ditugaskan untuk menangani tiket #${id} (${customerName}). Silakan periksa detailnya di aplikasi mobile.`,
+              { ticketId: id, customerName }
+            );
+          }
+        } catch (error) {
+          console.error('Notification Trigger Error:', error);
+          // Don't fail the whole request if notification fails
+        }
+      }
+    }
+
     const [updatedTicket]: any = await db.query(`
-      SELECT t.*, c.pppoe_username, COALESCE(t.phone_number, c.phone_number) as phone_number, e.full_name as assigned_name
+      SELECT 
+        t.*, c.pppoe_username, COALESCE(t.phone_number, c.phone_number) as phone_number,
+        GROUP_CONCAT(e.full_name SEPARATOR ', ') as assigned_names,
+        GROUP_CONCAT(e.id SEPARATOR ',') as assigned_ids
       FROM support_tickets t 
       LEFT JOIN customers c ON t.customer_id = c.id 
-      LEFT JOIN employees e ON t.assigned_to = e.id
+      LEFT JOIN ticket_assignees ta ON t.id = ta.ticket_id
+      LEFT JOIN employees e ON ta.employee_id = e.id
       WHERE t.id = ?
+      GROUP BY t.id
     `, [id]);
 
     return NextResponse.json({ success: true, ticket: updatedTicket });
