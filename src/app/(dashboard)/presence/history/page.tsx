@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Typography, Stack, Button, Card, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, alpha, useTheme, Avatar, 
-  Chip, TextField, MenuItem, Divider, Grid, IconButton, Tooltip
+  Chip, TextField, MenuItem, Divider, Grid, IconButton, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions
 } from "@mui/material";
 import { 
   FactCheck as PresenceIcon, 
@@ -12,7 +13,8 @@ import {
   FileDownload as ExportIcon, 
   LocationOn as LocationIcon, 
   PhotoCamera as PhotoIcon,
-  FilterList as FilterIcon
+  FilterList as FilterIcon,
+  Close as CloseIcon
 } from "@mui/icons-material";
 
 // Helper to get today's date in YYYY-MM-DD format (Jakarta Time)
@@ -35,6 +37,27 @@ export default function HistoryPage() {
     start: getJakartaDate(), 
     end: getJakartaDate() 
   });
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  // Modal State
+  const [openDetailModal, setOpenDetailModal] = useState(false);
+  const [selectedLog, setSelectedLog] = useState<any>(null);
+  const [modalView, setModalView] = useState<'photo' | 'location'>('photo');
+
+  const months = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+
+  const years = Array.from({ length: 8 }, (_, i) => 2024 + i);
+
+  const updateMonthlyRange = (m: number, y: number) => {
+    const firstStr = `${y}-${(m+1).toString().padStart(2, '0')}-01`;
+    const lastDay = new Date(y, m + 1, 0);
+    const lastStr = `${y}-${(m+1).toString().padStart(2, '0')}-${lastDay.getDate().toString().padStart(2, '0')}`;
+    setDateRange({ start: firstStr, end: lastStr });
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -72,11 +95,10 @@ export default function HistoryPage() {
       const firstDay = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
       const y = firstDay.getFullYear();
       const m = firstDay.getMonth();
-      const firstStr = `${y}-${(m+1).toString().padStart(2, '0')}-01`;
-      const lastDay = new Date(y, m + 1, 0);
-      const lastStr = `${y}-${(m+1).toString().padStart(2, '0')}-${lastDay.getDate().toString().padStart(2, '0')}`;
       
-      setDateRange({ start: firstStr, end: lastStr });
+      setSelectedMonth(m);
+      setSelectedYear(y);
+      updateMonthlyRange(m, y);
       setViewMode('grid'); // Default to Grid (Calendar) for month
     }
   };
@@ -230,19 +252,61 @@ export default function HistoryPage() {
                     <MenuItem value="custom">Pilih Tanggal</MenuItem>
                     </TextField>
 
-                    <TextField
-                    id="view-mode-select"
-                    select
-                    label="Tampilan"
-                    size="small"
-                    value={viewMode}
-                    onChange={(e) => setViewMode(e.target.value as any)}
-                    sx={{ minWidth: 150 }}
-                    >
-                    {filter === 'month' && <MenuItem value="grid">Kotak Kalender</MenuItem>}
-                    <MenuItem value="log">Log Detail</MenuItem>
-                    <MenuItem value="summary">Rekap Performa</MenuItem>
-                    </TextField>
+                    {filter === 'month' && (
+                        <>
+                            <TextField
+                            id="month-select"
+                            select
+                            label="Bulan"
+                            size="small"
+                            value={selectedMonth}
+                            onChange={(e) => {
+                                const m = Number(e.target.value);
+                                setSelectedMonth(m);
+                                updateMonthlyRange(m, selectedYear);
+                            }}
+                            sx={{ minWidth: 150 }}
+                            >
+                                {months.map((name, index) => (
+                                    <MenuItem key={index} value={index}>{name}</MenuItem>
+                                ))}
+                            </TextField>
+
+                            <TextField
+                            id="year-select"
+                            select
+                            label="Tahun"
+                            size="small"
+                            value={selectedYear}
+                            onChange={(e) => {
+                                const y = Number(e.target.value);
+                                setSelectedYear(y);
+                                updateMonthlyRange(selectedMonth, y);
+                            }}
+                            sx={{ minWidth: 100 }}
+                            >
+                                {years.map(y => (
+                                    <MenuItem key={y} value={y}>{y}</MenuItem>
+                                ))}
+                            </TextField>
+                        </>
+                    )}
+
+                    {filter !== 'today' && (
+                        <TextField
+                        id="view-mode-select"
+                        select
+                        label="Tampilan"
+                        size="small"
+                        value={viewMode}
+                        onChange={(e) => setViewMode(e.target.value as any)}
+                        sx={{ minWidth: 150 }}
+                        >
+                        {filter === 'month' && <MenuItem value="grid">Kotak Kalender</MenuItem>}
+                        {filter !== 'month' && <MenuItem value="log">Log Detail</MenuItem>}
+                        <MenuItem value="summary">Rekap Performa</MenuItem>
+                        </TextField>
+                    )}
                 </Stack>
 
                 {filter === 'custom' && (
@@ -278,10 +342,20 @@ export default function HistoryPage() {
                         <TableCell sx={{ fontWeight: 800, px: 4, position: 'sticky', left: 0, zIndex: 10, bgcolor: '#fff', minWidth: 220 }}>PEGAWAI</TableCell>
                         {viewMode === 'log' && (
                             <>
-                                <TableCell sx={{ fontWeight: 800 }}>WAKTU</TableCell>
-                                <TableCell sx={{ fontWeight: 800 }}>TIPE</TableCell>
-                                <TableCell sx={{ fontWeight: 800 }}>STATUS</TableCell>
-                                <TableCell sx={{ fontWeight: 800 }}>LOKASI / FOTO</TableCell>
+                                {dateRange.start === dateRange.end ? (
+                                    <>
+                                        <TableCell sx={{ fontWeight: 800 }}>MASUK</TableCell>
+                                        <TableCell sx={{ fontWeight: 800 }}>PULANG</TableCell>
+                                        <TableCell sx={{ fontWeight: 800 }}>BUKTI</TableCell>
+                                    </>
+                                ) : (
+                                    <>
+                                        <TableCell sx={{ fontWeight: 800 }}>WAKTU</TableCell>
+                                        <TableCell sx={{ fontWeight: 800 }}>TIPE</TableCell>
+                                        <TableCell sx={{ fontWeight: 800 }}>STATUS</TableCell>
+                                        <TableCell sx={{ fontWeight: 800 }}>LOKASI / FOTO</TableCell>
+                                    </>
+                                )}
                                 <TableCell sx={{ fontWeight: 800, px: 4 }}>CATATAN</TableCell>
                             </>
                         )}
@@ -399,59 +473,168 @@ export default function HistoryPage() {
                             
                             {viewMode === 'log' ? (
                                 <>
-                                    <TableCell sx={{ fontWeight: 600 }}>
-                                        {log.timestamp ? (
-                                            <>
-                                                <Typography variant="body2" sx={{ fontWeight: 700 }}>{new Date(log.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Typography>
-                                                <Typography variant="caption" color="text.secondary">{new Date(log.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</Typography>
-                                            </>
-                                        ) : (
-                                            <Typography variant="body2" color="text.disabled">--:--</Typography>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        {log.type ? (
-                                            <Chip 
-                                                label={log.type === 'clock_in' ? 'MASUK' : 'PULANG'} 
-                                                size="small" 
-                                                color={log.type === 'clock_in' ? 'primary' : 'secondary'}
-                                                sx={{ fontWeight: 900, borderRadius: 1.5, fontSize: '0.65rem' }}
-                                            />
-                                        ) : (
-                                            <Typography variant="caption" color="text.disabled">-</Typography>
-                                        )}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip 
-                                        label={log.status ? log.status.toUpperCase().replace('_', ' ') : 'BELUM ABSEN'} 
-                                        size="small" 
-                                        variant="outlined"
-                                        color={!log.status ? 'default' : (log.status === 'late' ? 'error' : 'success')}
-                                        sx={{ 
-                                            fontWeight: 900, 
-                                            borderRadius: 1.5, 
-                                            fontSize: '0.65rem',
-                                            opacity: !log.status ? 0.5 : 1
-                                        }}
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Stack direction="row" spacing={1}>
-                                        {log.location_lat && (
-                                            <Tooltip title="Lihat Lokasi GPS">
-                                            <IconButton size="small" color="primary"><LocationIcon fontSize="small" /></IconButton>
-                                            </Tooltip>
-                                        )}
-                                        {log.photo_url && (
-                                            <Tooltip title="Lihat Foto Selfi">
-                                            <IconButton size="small" color="info"><PhotoIcon fontSize="small" /></IconButton>
-                                            </Tooltip>
-                                        )}
-                                        {!log.location_lat && !log.photo_url && <Typography variant="caption" color="text.disabled">{log.id ? 'Manual / Web' : '-'}</Typography>}
-                                        </Stack>
-                                    </TableCell>
+                                    {dateRange.start === dateRange.end ? (
+                                        <>
+                                            {/* Consolidated DAILY View */}
+                                            <TableCell>
+                                                {log.clock_in_time ? (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{new Date(log.clock_in_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Typography>
+                                                        {log.clock_in_status === 'late' ? (
+                                                            <Typography variant="caption" color="error.main" sx={{ fontWeight: 800, fontSize: '0.6rem' }}>
+                                                                {(() => {
+                                                                    const actual = new Date(log.clock_in_time);
+                                                                    const [sh, sm] = (log.shift_start || '08:00:00').split(':').map(Number);
+                                                                    const shiftStart = new Date(actual);
+                                                                    shiftStart.setHours(sh, sm, 0, 0);
+                                                                    const diff = Math.max(0, Math.floor((actual.getTime() - shiftStart.getTime()) / 60000));
+                                                                    return `Terlambat ${diff}m`;
+                                                                })()}
+                                                            </Typography>
+                                                        ) : (
+                                                            <Typography variant="caption" color="success.main" sx={{ fontWeight: 800, fontSize: '0.6rem' }}>TEPAT WAKTU</Typography>
+                                                        )}
+                                                    </>
+                                                ) : <Typography variant="caption" color="text.disabled">--:--</Typography>}
+                                            </TableCell>
+                                            <TableCell>
+                                                {log.clock_out_time ? (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{new Date(log.clock_out_time).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Typography>
+                                                        <Typography variant="caption" color="primary.main" sx={{ fontWeight: 800, fontSize: '0.6rem' }}>PULANG</Typography>
+                                                    </>
+                                                ) : <Typography variant="caption" color="text.disabled">--:--</Typography>}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Stack direction="row" spacing={0.5}>
+                                                    {/* In Proof */}
+                                                    {(log.clock_in_lat || log.clock_in_photo) && (
+                                                        <Box sx={{ border: '1px solid #eee', p: 0.5, borderRadius: 1.5, bgcolor: '#f9f9f9', display: 'flex' }}>
+                                                            <Typography variant="caption" sx={{ alignSelf: 'center', mr: 0.5, fontWeight: 900, fontSize: '0.5rem', opacity: 0.5 }}>IN</Typography>
+                                                            {log.clock_in_lat && (
+                                                                <IconButton size="small" color="primary" onClick={() => { setSelectedLog({...log, location_lat: log.clock_in_lat, location_lng: log.clock_in_lng, timestamp: log.clock_in_time}); setModalView('location'); setOpenDetailModal(true); }}>
+                                                                    <LocationIcon sx={{ fontSize: '0.9rem' }} />
+                                                                </IconButton>
+                                                            )}
+                                                            {log.clock_in_photo && (
+                                                                <IconButton size="small" color="info" onClick={() => { setSelectedLog({...log, photo_url: log.clock_in_photo, timestamp: log.clock_in_time}); setModalView('photo'); setOpenDetailModal(true); }}>
+                                                                    <PhotoIcon sx={{ fontSize: '0.9rem' }} />
+                                                                </IconButton>
+                                                            )}
+                                                        </Box>
+                                                    )}
+                                                    {/* Out Proof */}
+                                                    {(log.clock_out_lat || log.clock_out_photo) && (
+                                                        <Box sx={{ border: '1px solid #eee', p: 0.5, borderRadius: 1.5, bgcolor: '#f9f9f9', display: 'flex' }}>
+                                                            <Typography variant="caption" sx={{ alignSelf: 'center', mr: 0.5, fontWeight: 900, fontSize: '0.5rem', opacity: 0.5 }}>OUT</Typography>
+                                                            {log.clock_out_lat && (
+                                                                <IconButton size="small" color="primary" onClick={() => { setSelectedLog({...log, location_lat: log.clock_out_lat, location_lng: log.clock_out_lng, timestamp: log.clock_out_time}); setModalView('location'); setOpenDetailModal(true); }}>
+                                                                    <LocationIcon sx={{ fontSize: '0.9rem' }} />
+                                                                </IconButton>
+                                                            )}
+                                                            {log.clock_out_photo && (
+                                                                <IconButton size="small" color="info" onClick={() => { setSelectedLog({...log, photo_url: log.clock_out_photo, timestamp: log.clock_out_time}); setModalView('photo'); setOpenDetailModal(true); }}>
+                                                                    <PhotoIcon sx={{ fontSize: '0.9rem' }} />
+                                                                </IconButton>
+                                                            )}
+                                                        </Box>
+                                                    )}
+                                                    {!log.clock_in_time && !log.clock_out_time && <Typography variant="caption" color="text.disabled" sx={{ fontWeight: 800 }}>BELUM ABSEN</Typography>}
+                                                </Stack>
+                                            </TableCell>
+                                        </>
+                                    ) : (
+                                        <>
+                                            {/* Original RANGE View (Row per Event) */}
+                                            <TableCell sx={{ fontWeight: 600 }}>
+                                                {log.timestamp ? (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{new Date(log.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Typography>
+                                                        <Typography variant="caption" color="text.secondary">{new Date(log.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</Typography>
+                                                    </>
+                                                ) : (
+                                                    <Typography variant="body2" color="text.disabled">--:--</Typography>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {log.type ? (
+                                                    <Chip 
+                                                        label={log.type === 'clock_in' ? 'MASUK' : 'PULANG'} 
+                                                        size="small" 
+                                                        color={log.type === 'clock_in' ? 'primary' : 'secondary'}
+                                                        sx={{ fontWeight: 900, borderRadius: 1.5, fontSize: '0.65rem' }}
+                                                    />
+                                                ) : (
+                                                    <Typography variant="caption" color="text.disabled">-</Typography>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                                    {log.status === 'late' && log.timestamp && log.shift_start ? (
+                                                        <Typography variant="caption" color="error.main" sx={{ fontWeight: 800, fontSize: '0.75rem' }}>
+                                                            {(() => {
+                                                                const actual = new Date(log.timestamp);
+                                                                const [sh, sm] = log.shift_start.split(':').map(Number);
+                                                                const shiftStart = new Date(actual);
+                                                                shiftStart.setHours(sh, sm, 0, 0);
+                                                                const diff = Math.max(0, Math.floor((actual.getTime() - shiftStart.getTime()) / 60000));
+                                                                return `Terlambat ${diff}m`;
+                                                            })()}
+                                                        </Typography>
+                                                    ) : (
+                                                        <Typography 
+                                                            variant="caption" 
+                                                            sx={{ 
+                                                                fontWeight: 900, 
+                                                                color: log.status === 'on_time' ? 'success.main' : 'text.disabled',
+                                                                fontSize: '0.7rem',
+                                                                opacity: log.status ? 1 : 0.5
+                                                            }}
+                                                        >
+                                                            {log.status ? log.status.toUpperCase().replace('_', ' ') : 'BELUM ABSEN'}
+                                                        </Typography>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Stack direction="row" spacing={1}>
+                                                {log.location_lat && (
+                                                    <Tooltip title="Lihat Lokasi GPS">
+                                                        <IconButton 
+                                                            size="small" 
+                                                            color="primary"
+                                                            onClick={() => {
+                                                                setSelectedLog(log);
+                                                                setModalView('location');
+                                                                setOpenDetailModal(true);
+                                                            }}
+                                                        >
+                                                            <LocationIcon fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
+                                                {log.photo_url && (
+                                                    <Tooltip title="Lihat Foto Selfi">
+                                                        <IconButton 
+                                                            size="small" 
+                                                            color="info"
+                                                            onClick={() => {
+                                                                setSelectedLog(log);
+                                                                setModalView('photo');
+                                                                setOpenDetailModal(true);
+                                                            }}
+                                                        >
+                                                            <PhotoIcon fontSize="small" />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
+                                                {!log.location_lat && !log.photo_url && <Typography variant="caption" color="text.disabled">{log.id ? 'Manual / Web' : '-'}</Typography>}
+                                                </Stack>
+                                            </TableCell>
+                                        </>
+                                    )}
                                     <TableCell sx={{ px: 4, color: 'text.secondary', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {log.note || '-'}
+                                        {log.clock_in_note || log.clock_out_note || log.note || '-'}
                                     </TableCell>
                                 </>
                             ) : (
@@ -490,6 +673,95 @@ export default function HistoryPage() {
             </Card>
         </>
       )}
+
+      {/* Detail Modal */}
+      <Dialog 
+        open={openDetailModal} 
+        onClose={() => setOpenDetailModal(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+            sx: { borderRadius: 4, overflow: 'hidden' }
+        }}
+      >
+        <DialogTitle sx={{ m: 0, p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
+            <Box>
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                    {modalView === 'location' ? 'Lokasi Presensi' : 'Foto Presensi'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                    {selectedLog?.employee_name} • {selectedLog?.timestamp && new Date(selectedLog.timestamp).toLocaleString('id-ID')}
+                </Typography>
+            </Box>
+            <IconButton onClick={() => setOpenDetailModal(false)} size="small">
+                <CloseIcon />
+            </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 3 }}>
+            <Box>
+                {modalView === 'photo' ? (
+                    <Box>
+                        {selectedLog?.photo_url ? (
+                            <Box 
+                                component="img"
+                                src={selectedLog.photo_url}
+                                alt="Selfie Evidence"
+                                sx={{ 
+                                    width: '100%', 
+                                    borderRadius: 3, 
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                    maxH: 500,
+                                    objectFit: 'contain',
+                                    bgcolor: '#f5f5f5'
+                                }}
+                            />
+                        ) : (
+                            <Box sx={{ py: 10, textAlign: 'center' }}>
+                                <Typography variant="body2" color="text.disabled">Tidak ada lampiran foto</Typography>
+                            </Box>
+                        )}
+                    </Box>
+                ) : (
+                    <Box>
+                        {selectedLog?.location_lat ? (
+                            <Stack spacing={2}>
+                                <Box 
+                                    component="iframe"
+                                    src={`https://www.google.com/maps?q=${selectedLog.location_lat},${selectedLog.location_lng}&output=embed&z=18`}
+                                    sx={{ 
+                                        width: '100%', 
+                                        height: 450, 
+                                        border: 0, 
+                                        borderRadius: 3,
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                                    }}
+                                    title="Location Map"
+                                />
+                                <Button 
+                                    variant="outlined" 
+                                    color="primary" 
+                                    fullWidth
+                                    onClick={() => window.open(`https://www.google.com/maps?q=${selectedLog.location_lat},${selectedLog.location_lng}`, '_blank')}
+                                    sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700 }}
+                                >
+                                    Buka di Google Maps
+                                </Button>
+                            </Stack>
+                        ) : (
+                            <Box sx={{ py: 10, textAlign: 'center' }}>
+                                <Typography variant="body2" color="text.disabled">Tidak ada data lokasi GPS</Typography>
+                            </Box>
+                        )}
+                    </Box>
+                )}
+            </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+            <Button onClick={() => setOpenDetailModal(false)} variant="contained" sx={{ borderRadius: 2, px: 4, fontWeight: 700 }}>
+                Tutup
+            </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

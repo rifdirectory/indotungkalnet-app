@@ -496,7 +496,7 @@ export default function SupportPageContent() {
                           ticket.status === 'Open' ? theme.palette.warning.main : 
                           ticket.status === 'OTW' ? theme.palette.info.main :
                           ticket.status === 'Sedang Dikerjakan' ? theme.palette.primary.main : 
-                          ticket.status === 'Selesai' ? theme.palette.success.main : 
+                          ticket.status === 'Sudah Diperbaiki' ? theme.palette.secondary.main : 
                           theme.palette.success.main, 
                           0.1
                         ),
@@ -504,7 +504,7 @@ export default function SupportPageContent() {
                           ticket.status === 'Open' ? 'warning.main' : 
                           ticket.status === 'OTW' ? 'info.main' :
                           ticket.status === 'Sedang Dikerjakan' ? 'primary.main' : 
-                          ticket.status === 'Selesai' ? 'success.main' : 
+                          ticket.status === 'Sudah Diperbaiki' ? 'secondary.main' : 
                           'success.main',
                         borderRadius: 3,
                         border: '1px solid'
@@ -793,6 +793,18 @@ export default function SupportPageContent() {
                   </Select>
                 </FormControl>
 
+                {selectedTicket.status === 'Sudah Diperbaiki' && (
+                  <Button 
+                    variant="contained" 
+                    color="success" 
+                    size="small"
+                    startIcon={<CheckIcon />}
+                    onClick={() => handleStatusUpdate('Selesai')}
+                    sx={{ p: 1.2, fontWeight: 900, borderRadius: 3, letterSpacing: 0.5 }}
+                  >
+                    VERIFIKASI & SELESAI
+                  </Button>
+                )}
 
                 <IconButton onClick={() => setDetailOpen(false)} sx={{ ml: 1 }}>
                   <CloseIcon />

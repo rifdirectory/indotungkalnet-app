@@ -38,13 +38,21 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, message: 'Akun Anda sudah tidak aktif' }, { status: 403 });
         }
 
+        // Check if employee is a PIC
+        const picCheck = await db.query(
+            `SELECT COUNT(*) as count FROM positions WHERE pic_id = ?`,
+            [employee.id]
+        ) as any[];
+        const isPic = picCheck[0].count > 0;
+
         // Create JWT token
         const token = await encrypt({
             userId: employee.id,
             employee_code: employee.employee_code,
             full_name: employee.full_name,
             role: 'employee',
-            position: employee.position_name
+            position: employee.position_name,
+            is_pic: isPic
         });
 
         return NextResponse.json({ 
@@ -55,7 +63,8 @@ export async function POST(req: Request) {
                 id: employee.id,
                 employee_code: employee.employee_code,
                 full_name: employee.full_name,
-                position: employee.position_name
+                position: employee.position_name,
+                is_pic: isPic
             }
         });
 

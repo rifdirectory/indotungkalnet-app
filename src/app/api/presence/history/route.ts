@@ -1,97 +1,83 @@
-import { NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
+
+// Helper for Jakarta Date string (YYYY-MM-DD)
+const getJakartaDate = () => {
+    return new Intl.DateTimeFormat('en-CA', { 
+        timeZone: 'Asia/Jakarta', 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+    }).format(new Date());
+};
+
+// Helper for total minutes from midnight Jakarta
+const getJakartaMinutes = (date: Date) => {
+    const timeStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Jakarta',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false
+    }).format(date);
+    const [h, m] = timeStr.split(':').map(Number);
+    return (h * 60) + m;
+};
 
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
-        const start = searchParams.get('start');
-        const end = searchParams.get('end');
+        const employee_id = searchParams.get('employee_id');
+        const start = searchParams.get('start') || getJakartaDate();
+        const end = searchParams.get('end') || getJakartaDate();
+        const limit = parseInt(searchParams.get('limit') || '1000');
         const mode = searchParams.get('mode');
 
-        let sql = '';
-        let params: any[] = [];
+        let history: any[] = [];
 
-        if (mode === 'grid') {
-            // 4. MONTHLY GRID: Fetch logs + Shift times for late/overtime calc
-            const logs = await query(`
-                SELECT 
-                    e.id as employee_id, 
-                    e.full_name as employee_name, 
-                    p.name as position_name,
-                    a.id as log_id,
-                    a.timestamp,
-                    a.type,
-                    a.status,
-                    s.start_time as shift_start,
-                    s.end_time as shift_end
-                FROM employees e
-                LEFT JOIN positions p ON e.position_id = p.id
-                LEFT JOIN attendance a ON e.id = a.employee_id AND DATE(a.timestamp) BETWEEN ? AND ?
-                LEFT JOIN employee_shifts es ON e.id = es.employee_id AND es.date = DATE(a.timestamp)
-                LEFT JOIN shifts s ON es.shift_id = s.id
-                WHERE (p.name IS NULL OR p.name != 'Cleaning Service')
-                ORDER BY e.full_name ASC, a.timestamp ASC
-            `, [start, end]);
-
-            // Fetch Leaves
-            const leaves = await query(`
-                SELECT * FROM leave_requests 
-                WHERE status = 'approved' AND (start_date BETWEEN ? AND ? OR end_date BETWEEN ? AND ?)
-            `, [start, end, start, end]);
-
-            // Fetch Assigned Overtimes
-            const overtimes = await query(`
-                SELECT * FROM overtime_requests 
-                WHERE date BETWEEN ? AND ?
-            `, [start, end]);
-
-            return NextResponse.json({ 
-                success: true, 
-                data: logs,
-                leaves,
-                overtimes
-            });
-        } else if (mode === 'summary') {
-            // 1. SINGLE DAY STATUS BOARD: Show all employees (except Cleaning Service) + their logs for that day
-            sql = `
-                SELECT 
-                    e.id as employee_id, 
-                    e.full_name as employee_name, 
-                    p.name as position_name,
-                    a.id,
-                    a.timestamp,
-                    a.type,
-                    a.status,
-                    a.photo_url,
-                    a.location_lat,
-                    a.location_lng,
-                    a.note
-                FROM employees e
-                LEFT JOIN positions p ON e.position_id = p.id
-                LEFT JOIN attendance a ON e.id = a.employee_id AND DATE(a.timestamp) = ?
-                WHERE (p.name IS NULL OR p.name != 'Cleaning Service')
-                ORDER BY e.full_name ASC, a.timestamp DESC
-            `;
-            params = [start];
-        } else {
-            // 2. RANGE LOG VIEW: Original behavior (only people who clocked)
-            sql = `
-                SELECT a.*, e.full_name as employee_name, p.name as position_name
+        if (employee_id) {
+            // MOBILE MODE: Fetch logs for specific employee
+            history = await query(`
+                SELECT a.*, e.full_name as employee_name, p.name as position_name, 
+                       s.name as shift_name, s.start_time as shift_start, s.end_time as shift_end
                 FROM attendance a
                 JOIN employees e ON a.employee_id = e.id
                 LEFT JOIN positions p ON e.position_id = p.id
-                WHERE (p.name IS NULL OR p.name != 'Cleaning Service')
-            `;
-            if (start && end) {
-                sql += ' AND DATE(a.timestamp) BETWEEN ? AND ?';
-                params = [start, end];
-            }
-            sql += ' ORDER BY a.timestamp DESC';
+                LEFT JOIN employee_shifts es ON (a.employee_id = es.employee_id AND DATE(a.timestamp) = es.date)
+                LEFT JOIN shifts s ON es.shift_id = s.id
+                WHERE a.employee_id = ?
+                ORDER BY a.timestamp DESC
+                LIMIT ?
+            `, [employee_id, limit]);
+        } else {
+            // DASHBOARD MODE: Fetch ALL active employees + their logs for the range
+            // Using LEFT JOIN from employees table to ensure everyone shows up
+            history = await query(`
+                SELECT 
+                    e.id as employee_id, e.full_name as employee_name, p.name as position_name,
+                    a.id as log_id, a.type, a.status, a.timestamp, a.note, a.photo_url, 
+                    a.location_lat, a.location_lng,
+                    s.name as shift_name, s.start_time as shift_start, s.end_time as shift_end
+                FROM employees e
+                LEFT JOIN positions p ON e.position_id = p.id
+                LEFT JOIN attendance a ON (e.id = a.employee_id AND DATE(a.timestamp) BETWEEN ? AND ?)
+                LEFT JOIN employee_shifts es ON (e.id = es.employee_id AND DATE(a.timestamp) = es.date)
+                LEFT JOIN shifts s ON es.shift_id = s.id
+                WHERE e.status = 'active'
+                ORDER BY e.full_name ASC, a.timestamp DESC
+                LIMIT ?
+            `, [start, end, limit]);
         }
 
-        const rows = await query(sql, params);
-        return NextResponse.json({ success: true, data: rows });
+        return NextResponse.json({ 
+            success: true, 
+            data: history,
+            ...(mode === 'grid' && {
+                leaves: await query("SELECT * FROM leave_requests WHERE status = 'approved'"),
+                overtimes: await query("SELECT * FROM overtime_requests WHERE status = 'approved'")
+            })
+        });
     } catch (error: any) {
+        console.error('[Presence] GET API Error:', error);
         return NextResponse.json({ success: false, message: error.message }, { status: 500 });
     }
 }
@@ -100,41 +86,79 @@ export async function POST(req: Request) {
     try {
         const { employee_id, type, note, location_lat, location_lng, photo_url } = await req.json();
         const now = new Date();
-        const currentTime = now.toLocaleTimeString('id-ID', { hour12: false });
-        const currentDate = now.toISOString().split('T')[0];
+        const currentDate = getJakartaDate();
+        const currentMinutes = getJakartaMinutes(now);
 
-        // 1. Get Employee's Shift for today
-        const shiftRows = await query(`
-            SELECT s.* 
-            FROM employee_shifts es
-            JOIN shifts s ON es.shift_id = s.id
-            WHERE es.employee_id = ? AND es.date = ?
-        `, [employee_id, currentDate]);
+        console.log(`[Presence] POST ${type} for employee ${employee_id} at ${now.toISOString()} (Jakarta Minutes: ${currentMinutes})`);
 
-        let shift = (shiftRows as any[])[0];
-        
-        // 2. Fallback to 'Normal Day' if no manual schedule & it's mon-sat
-        if (!shift && now.getDay() !== 0) {
-            const normalRows = await query("SELECT * FROM shifts WHERE name = 'Normal Day'");
-            shift = (normalRows as any[])[0];
+        // 0. Validate Inputs
+        if (!employee_id || !type) {
+            return NextResponse.json({ success: false, message: 'Data tidak lengkap' }, { status: 400 });
         }
 
-        // 3. Determine Status (Late/On-Time) with 20-minute Grace Period
-        let status = 'on_time';
-        if (type === 'clock_in' && shift) {
-            // Parse shift start time (HH:mm:ss)
-            const [sh, sm] = shift.start_time.split(':').map(Number);
-            const shiftStart = new Date(now);
-            shiftStart.setHours(sh, sm, 0, 0);
+        // 1. Sequence & Duplicate Guard
+        if (type === 'clock_in') {
+            const existingIn = await query(
+                'SELECT id FROM attendance WHERE employee_id = ? AND type = "clock_in" AND DATE(timestamp) = ?',
+                [employee_id, currentDate]
+            );
+            if ((existingIn as any[]).length > 0) {
+                return NextResponse.json({ success: false, message: 'Anda sudah melakukan absen masuk hari ini.' }, { status: 400 });
+            }
+        } else {
+            // Clock-out checks
+            const existingOut = await query(
+                'SELECT id FROM attendance WHERE employee_id = ? AND type = "clock_out" AND DATE(timestamp) = ?',
+                [employee_id, currentDate]
+            );
+            if ((existingOut as any[]).length > 0) {
+                return NextResponse.json({ success: false, message: 'Anda sudah melakukan absen pulang hari ini.' }, { status: 400 });
+            }
 
-            // Add 20 minutes grace period
-            const threshold = new Date(shiftStart.getTime() + 20 * 60 * 1000);
-            
-            if (now > threshold) {
-                status = 'late';
+            const checkInExists = await query(
+                'SELECT id FROM attendance WHERE employee_id = ? AND type = "clock_in" AND DATE(timestamp) = ?',
+                [employee_id, currentDate]
+            );
+            if ((checkInExists as any[]).length === 0) {
+                return NextResponse.json({ success: false, message: 'Anda belum absen masuk hari ini. Silakan absen masuk terlebih dahulu.' }, { status: 400 });
             }
         }
 
+        // 2. Load Shift for Timing Calculations
+        // Fallback to 08:00 - 17:00 if no specific shift is assigned today
+        const shiftRows: any = await query(`
+            SELECT s.* FROM shifts s
+            JOIN employee_shifts es ON s.id = es.shift_id
+            WHERE es.employee_id = ? AND es.date = ?
+        `, [employee_id, currentDate]);
+        
+        const shift = shiftRows?.[0];
+        let status = 'on_time';
+
+        if (type === 'clock_in') {
+            const startStr = shift?.start_time || '08:00:00';
+            const [sh, sm] = startStr.split(':').map(Number);
+            const shiftStartMinutes = (sh * 60) + sm;
+
+            // Late if more than 20 minutes past start
+            if (currentMinutes > (shiftStartMinutes + 20)) {
+                status = 'late';
+            }
+        } else {
+            const endStr = shift?.end_time || '17:00:00';
+            const [eh, em] = endStr.split(':').map(Number);
+            const shiftEndMinutes = (eh * 60) + em;
+
+            // Block early clock-out
+            if (currentMinutes < shiftEndMinutes) {
+                return NextResponse.json({ 
+                    success: false, 
+                    message: `Belum waktunya pulang. Shift Anda berakhir jam ${endStr.substring(0, 5)}.` 
+                }, { status: 400 });
+            }
+        }
+
+        // 3. Record Attendance
         const result = await query(
             'INSERT INTO attendance (employee_id, type, note, location_lat, location_lng, photo_url, status, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [
@@ -145,12 +169,18 @@ export async function POST(req: Request) {
                 location_lng ?? null, 
                 photo_url ?? null,
                 status,
-                now // Use Node.js Date object (Asia/Jakarta)
+                now 
             ]
         );
-        
-        return NextResponse.json({ success: true, id: (result as any).insertId, status });
+
+        return NextResponse.json({ 
+            success: true, 
+            id: (result as any).insertId, 
+            status 
+        });
+
     } catch (error: any) {
+        console.error('[Presence] API Error:', error);
         return NextResponse.json({ success: false, message: error.message }, { status: 500 });
     }
 }

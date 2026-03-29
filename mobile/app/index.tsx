@@ -13,10 +13,10 @@ import {
 import { useRouter } from 'expo-router';
 import { Fingerprint, Smartphone, User, Lock } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
+import { API_URL } from '../services/api';
 import axios from 'axios';
 
-// Konfigurasi API
-const API_URL = 'http://192.168.1.7:3000/api';
+// Konfigurasi API - Sekarang diambil dari services/api.js
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -39,12 +39,13 @@ export default function LoginScreen() {
 
       if (response.data.success) {
         // Simpan data user ke SecureStore
-        const { full_name, position, id } = response.data.data;
+        const { full_name, position, id, is_pic } = response.data.data;
         await SecureStore.setItemAsync('user_name', full_name);
         await SecureStore.setItemAsync('user_position', position);
         await SecureStore.setItemAsync('user_id', id.toString());
+        await SecureStore.setItemAsync('user_is_pic', is_pic ? 'true' : 'false');
         
-        router.push('/home');
+        router.replace('/(drawer)/home');
       } else {
         Alert.alert('Gagal', response.data.message);
       }

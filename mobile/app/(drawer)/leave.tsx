@@ -7,7 +7,9 @@ import {
   SafeAreaView, 
   TextInput,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Platform,
+  StatusBar
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { 
@@ -20,7 +22,7 @@ import {
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 
-const API_URL = 'http://192.168.1.7:3000/api';
+import { API_URL } from '../../services/api';
 
 export default function LeaveScreen() {
   const router = useRouter();
@@ -69,15 +71,22 @@ export default function LeaveScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <View className="px-6 py-4 flex-row items-center justify-between border-b border-gray-100">
+      <StatusBar barStyle="dark-content" />
+      
+      {/* Sticky Header with Android Padding */}
+      <View 
+        style={{ paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 10 }}
+        className="px-6 pb-4 bg-white border-b border-slate-100 flex-row items-center justify-between z-10"
+      >
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-            <ChevronLeft size={24} color="#000" />
+            <ChevronLeft size={24} color="#334155" />
         </TouchableOpacity>
-        <Text className="text-xl font-bold">Ajukan Izin / Cuti</Text>
+        <Text className="text-slate-800 font-bold tracking-tight text-lg">Ajukan Izin / Cuti</Text>
         <View className="w-10" />
       </View>
-
-      <ScrollView className="flex-1 p-6">
+ 
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <View className="p-6">
         <Text className="text-gray-400 font-bold mb-4 uppercase tracking-widest text-xs">JENIS PERMOHONAN</Text>
         <View className="flex-row space-x-3 mb-8">
             {['izin', 'sakit', 'cuti'].map((t) => (
@@ -137,7 +146,7 @@ export default function LeaveScreen() {
             )}
         </TouchableOpacity>
         
-        <View className="h-20" />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

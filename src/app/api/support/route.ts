@@ -96,12 +96,14 @@ export async function POST(req: Request) {
 
       const autoAssignee: any = await db.query(`
         SELECT e.id, e.full_name,
+               COUNT(t.id) as ticket_count,
                COALESCE(SUM(CASE 
                  WHEN t.difficulty = 'High' THEN 3
                  WHEN t.difficulty = 'Medium' THEN 2
                  WHEN t.difficulty = 'Low' THEN 1
                  ELSE 0
-               END), 0) as workload
+               END), 0) as workload,
+               MAX(t.created_at) as last_assigned
         FROM employees e
         JOIN positions p ON e.position_id = p.id
         JOIN employee_shifts es ON e.id = es.employee_id AND es.date = ?
@@ -113,7 +115,7 @@ export async function POST(req: Request) {
           AND e.status = 'active'
           AND ? BETWEEN s.start_time AND s.end_time
         GROUP BY e.id
-        ORDER BY workload ASC, RAND()
+        ORDER BY ticket_count ASC, workload ASC, last_assigned ASC, RAND()
         LIMIT 2
       `, [jakartaDate, jakartaTime]);
       

@@ -1,91 +1,100 @@
-import { NextResponse } from 'next/server';
-import db from '@/lib/db';
+import { NextResponse } from "next/server";
+import { query } from "@/lib/db";
 
-export const dynamic = 'force-dynamic';
+// Helper for total minutes from midnight Jakarta
+const getJakartaMinutes = (date: Date) => {
+    const timeStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Jakarta',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false
+    }).format(date);
+    const [h, m] = timeStr.split(':').map(Number);
+    return (h * 60) + m;
+};
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const employeeId = searchParams.get('employee_id');
+const getJakartaDate = () => {
+    return new Intl.DateTimeFormat('en-CA', { 
+        timeZone: 'Asia/Jakarta', 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+    }).format(new Date());
+};
 
-    if (!employeeId) {
-      return NextResponse.json({ success: false, message: 'Employee ID required' }, { status: 400 });
-    }
+export async function GET(req: Request) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const employee_id = searchParams.get('employee_id');
 
-    // 1. Get Jakarta Date & Time
-    const now = new Date();
-    const jakartaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(now);
-    const jakartaTime = now.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour12: false });
+        if (!employee_id) {
+            return NextResponse.json({ success: false, message: 'Employee ID required' }, { status: 400 });
+        }
 
-    // 2. Get Today's Shift
-    const shift: any = await db.query(`
-      SELECT s.* FROM employee_shifts es
-      JOIN shifts s ON es.shift_id = s.id
-      WHERE es.employee_id = ? AND es.date = ?
-    `, [employeeId, jakartaDate]);
+        const jakartaDate = getJakartaDate();
+        const now = new Date();
+        const currentMinutes = getJakartaMinutes(now);
 
-    const sStart = shift[0]?.start_time || '08:00:00';
-    const sName = shift[0]?.name || 'Normal';
-
-    // 3. Get Today's Clock-in Log
-    const logs: any = await db.query(`
-      SELECT * FROM attendance 
-      WHERE employee_id = ? AND DATE(timestamp) = ? AND type = 'clock_in'
-      LIMIT 1
-    `, [employeeId, jakartaDate]);
-
-    let status = 'Belum Absen';
-    let duration = '';
-    let color = '#6b7280'; // Gray
-
-    if (logs.length > 0) {
-      const log = logs[0];
-      if (log.status === 'late') {
-        status = 'Terlambat';
-        color = '#ff453a'; // Red
+        // 1. Get Shift for today
+        const shiftData: any = await query(`
+            SELECT s.* FROM shifts s
+            JOIN employee_shifts es ON s.id = es.shift_id
+            WHERE es.employee_id = ? AND es.date = ?
+        `, [employee_id, jakartaDate]);
         
-        // Calculate duration based on shift start
-        const actual = new Date(log.timestamp);
-        const shiftStart = new Date(actual);
-        const [sh, sm] = sStart.split(':').map(Number);
-        shiftStart.setHours(sh, sm, 0, 0);
-        const diff = Math.floor((actual.getTime() - shiftStart.getTime()) / 60000);
-        duration = `${diff}m`;
-      } else {
-        status = 'Hadir';
-        color = '#30d158'; // Green
-      }
-    } else {
-      // Not clocked in yet. Check if already late (> 20 mins)
-      const current = new Date(); // Warning: Server time might differ, but JakartaTime is used for calculation
-      const [sh, sm] = sStart.split(':').map(Number);
-      const shiftStartGrace = new Date();
-      shiftStartGrace.setHours(sh, sm + 20, 0, 0);
+        const shift = (shiftData as any[])?.[0];
+        const sStart = shift?.start_time || '08:00:00';
+        const sEnd = shift?.end_time || '17:00:00';
 
-      // Use a consistent comparison strategy
-      const jakartaNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-      const jakartaShiftGrace = new Date(jakartaNow);
-      jakartaShiftGrace.setHours(sh, sm + 20, 0, 0);
+        // 2. Get today's logs
+        const allLogs: any = await query(`
+            SELECT type, status, timestamp FROM attendance 
+            WHERE employee_id = ? AND DATE(timestamp) = ?
+            ORDER BY timestamp ASC
+        `, [employee_id, jakartaDate]);
 
-      if (jakartaNow > jakartaShiftGrace) {
-        status = 'Terlambat';
-        color = '#ff453a';
-        duration = 'Segera Absen!';
-      }
+        const hasIn = allLogs.some((l: any) => l.type === 'clock_in');
+        const hasOut = allLogs.some((l: any) => l.type === 'clock_out');
+
+        // 3. Determine Overall Status
+        let status = 'Belum Absen';
+        let duration = 'Segera Absen!';
+
+        if (hasIn) {
+            const inRecord = allLogs.find((l: any) => l.type === 'clock_in');
+            status = inRecord.status === 'late' ? 'Terlambat' : 'Hadir';
+            duration = 'Sedang Bekerja';
+        }
+
+        if (hasOut) {
+            status = 'Sudah Pulang';
+            duration = 'Selesai';
+        }
+
+        // 4. Calculate can_clock_out (Minutes from Midnight Jakarta)
+        const [eh, em] = sEnd.split(':').map(Number);
+        const shiftEndMinutes = (eh * 60) + em;
+        
+        // can_clock_out only if already clocked in AND current time is >= shift end
+        const canClockOut = hasIn && !hasOut && (currentMinutes >= shiftEndMinutes);
+
+        return NextResponse.json({
+            success: true,
+            data: {
+                status,
+                duration,
+                shift_name: shift?.name || 'Normal',
+                shift_hours: `${sStart.substring(0, 5)} - ${sEnd.substring(0, 5)}`,
+                shift_start: sStart.substring(0, 5),
+                shift_end: sEnd.substring(0, 5),
+                has_clocked_in: !!hasIn,
+                has_clocked_out: !!hasOut,
+                can_clock_out: !!canClockOut
+            }
+        });
+
+    } catch (error: any) {
+        console.error('[Presence] Status API Error:', error);
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
     }
-
-    return NextResponse.json({ 
-      success: true, 
-      data: { 
-        status, 
-        duration, 
-        color,
-        shift_name: sName,
-        shift_hours: `${sStart} - ${shift[0]?.end_time || '16:00:00'}`
-      } 
-    });
-  } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json({ success: false, message: 'Internal Server Error' }, { status: 500 });
-  }
 }
