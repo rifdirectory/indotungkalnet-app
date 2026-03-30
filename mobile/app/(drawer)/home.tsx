@@ -57,6 +57,8 @@ export default function HomeScreen() {
   const [hasClockedOut, setHasClockedOut] = useState(false);
   const [canClockOut, setCanClockOut] = useState(false);
   const [shiftEnd, setShiftEnd] = useState('16:00');
+  const [isOnLeave, setIsOnLeave] = useState(false);
+  const [leaveType, setLeaveType] = useState<string | null>(null);
   
   const calculateDistance = (currentCoords: any, targetCoords: any) => {
     if (!currentCoords || !targetCoords) return;
@@ -152,6 +154,8 @@ export default function HomeScreen() {
         setUserStatusColor(d.color || '#6b7280');
         setUserShift(d.shift_name);
         setUserShiftHours(d.shift_hours);
+        setIsOnLeave(d.is_on_leave);
+        setLeaveType(d.leave_type);
       }
 
       // 3. Kick off Location in background (Don't await fully to speed up UI)
@@ -276,7 +280,7 @@ export default function HomeScreen() {
                     </Text>
                 </View>
                 <Text className={`text-lg font-bold ${locationEnabled ? (isWithinRadius ? 'text-emerald-800' : 'text-rose-800') : 'text-amber-800'}`}>
-                    {locationEnabled ? (isWithinRadius ? 'Dalam Area Kantor' : 'Diluar Area') : 'GPS Tidak Aktif'}
+                    {isOnLeave ? `Sedang Masa ${leaveType?.charAt(0).toUpperCase()}${leaveType?.slice(1)}` : (locationEnabled ? (isWithinRadius ? 'Dalam Area Kantor' : 'Diluar Area') : 'GPS Tidak Aktif')}
                 </Text>
                 <Text className={`text-xs opacity-70 ${locationEnabled ? (isWithinRadius ? 'text-emerald-600' : 'text-rose-600') : 'text-amber-600'}`}>
                     Status: {userStatus}
@@ -288,46 +292,30 @@ export default function HomeScreen() {
         <View className="px-6 flex-row space-x-4 mb-8">
             <TouchableOpacity 
                 onPress={() => handleAttendance('clock_in')}
-                disabled={hasClockedIn}
-                className={`flex-1 h-32 rounded-3xl items-center justify-center ${locationEnabled && !hasClockedIn ? 'bg-blue-600' : 'bg-slate-100'}`}
+                disabled={hasClockedIn || isOnLeave}
+                className={`flex-1 h-32 rounded-3xl items-center justify-center ${locationEnabled && !hasClockedIn && !isOnLeave ? 'bg-blue-600' : 'bg-slate-100'}`}
             >
-                <Camera size={32} color={locationEnabled && !hasClockedIn ? 'white' : '#cbd5e1'} />
-                <Text className={`font-bold mt-2 ${locationEnabled && !hasClockedIn ? 'text-white' : 'text-slate-400'}`}>
-                    {hasClockedIn ? 'SUDAH ABSEN' : 'ABSEN MASUK'}
+                <Camera size={32} color={locationEnabled && !hasClockedIn && !isOnLeave ? 'white' : '#cbd5e1'} />
+                <Text className={`font-bold mt-2 ${locationEnabled && !hasClockedIn && !isOnLeave ? 'text-white' : 'text-slate-400'}`}>
+                    {isOnLeave ? 'SEDANG IZIN' : (hasClockedIn ? 'SUDAH ABSEN' : 'ABSEN MASUK')}
                 </Text>
             </TouchableOpacity>
 
             <TouchableOpacity 
                 onPress={() => handleAttendance('clock_out')}
-                disabled={hasClockedOut || !hasClockedIn || !canClockOut}
-                style={{ opacity: (hasClockedOut || !hasClockedIn || !canClockOut) ? 0.3 : 1 }}
-                className={`flex-1 h-32 rounded-3xl items-center justify-center border ${hasClockedOut || !hasClockedIn || !canClockOut ? 'bg-slate-300 border-slate-400' : 'bg-white border-slate-200'}`}
+                disabled={hasClockedOut || !hasClockedIn || !canClockOut || isOnLeave}
+                style={{ opacity: (hasClockedOut || !hasClockedIn || !canClockOut || isOnLeave) ? 0.3 : 1 }}
+                className={`flex-1 h-32 rounded-3xl items-center justify-center border ${hasClockedOut || !hasClockedIn || !canClockOut || isOnLeave ? 'bg-slate-300 border-slate-400' : 'bg-white border-slate-200'}`}
             >
-                <LogOut size={32} color={hasClockedOut || !hasClockedIn || !canClockOut ? '#64748b' : '#64748b'} />
-                <Text className={`font-bold mt-2 text-center px-1 text-[11px] ${hasClockedOut || !hasClockedIn || !canClockOut ? 'text-slate-600' : 'text-slate-600'}`}>
-                    {hasClockedOut ? 'SUDAH PULANG' : (!hasClockedIn ? 'BELUM MASUK' : (!canClockOut ? `JAM ${shiftEnd}` : 'ABSEN PULANG'))}
+                <LogOut size={32} color={hasClockedOut || !hasClockedIn || !canClockOut || isOnLeave ? '#64748b' : '#64748b'} />
+                <Text className={`font-bold mt-2 text-center px-1 text-[11px] ${hasClockedOut || !hasClockedIn || !canClockOut || isOnLeave ? 'text-slate-600' : 'text-slate-600'}`}>
+                    {isOnLeave ? 'SEDANG IZIN' : (hasClockedOut ? 'SUDAH PULANG' : (!hasClockedIn ? 'BELUM MASUK' : (!canClockOut ? `JAM ${shiftEnd}` : 'ABSEN PULANG')))}
                 </Text>
             </TouchableOpacity>
         </View>
 
-        {/* Shortcut Actions */}
-        <View className="px-6 pb-24 flex-row justify-between">
-            <TouchableOpacity 
-                onPress={() => router.push('/tasks')}
-                className="flex-1 bg-white p-4 rounded-2xl border border-slate-100 flex-row items-center mr-2"
-            >
-                <ClipboardCheck size={20} color="#3b82f6" />
-                <Text className="font-bold text-slate-700 ml-3 text-sm">Tugas</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-                onPress={() => router.push('/leave')}
-                className="flex-1 bg-white p-4 rounded-2xl border border-slate-100 flex-row items-center ml-2"
-            >
-                <Calendar size={20} color="#3b82f6" />
-                <Text className="font-bold text-slate-700 ml-3 text-sm">Izin</Text>
-            </TouchableOpacity>
-        </View>
+        {/* Bottom Padding for Scroll */}
+        <View className="pb-32" />
 
       </ScrollView>
     </SafeAreaView>

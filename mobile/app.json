@@ -1,8 +1,14 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "my-app",
+    "slug": "my-app",
     "version": "1.0.0",
+    "scheme": "itnet-mobile",
+    "extra": {
+      "eas": {
+        "projectId": "5ec48667-d203-44f7-92d2-87eeb98a57be"
+      }
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -31,14 +37,15 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.anonymous.mobile"
+      "package": "com.rifdirectory.indotungkalnet"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-community/datetimepicker"
     ]
   }
 }

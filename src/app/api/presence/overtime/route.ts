@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { sendExpoPushNotification } from '@/lib/notifications';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,28 @@ export async function PUT(request: Request) {
       SET status = ?, approved_by = ? 
       WHERE id = ?
     `, [status, approved_by || 1, id]);
+
+    // Send Push Notification
+    try {
+        const data: any = await db.query(`
+            SELECT o.date, e.push_token 
+            FROM overtime_requests o
+            JOIN employees e ON o.employee_id = e.id
+            WHERE o.id = ?
+        `, [id]);
+
+        if (data && data[0]?.push_token) {
+            const statusLabel = status === 'approved' ? 'Disetujui' : 'Ditolak';
+            const dateStr = new Date(data[0].date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+            await sendExpoPushNotification(
+                [data[0].push_token],
+                `Lembur ${statusLabel}`,
+                `Permohonan lembur Anda (${dateStr}) telah ${statusLabel.toLowerCase()} oleh PIC.`
+            );
+        }
+    } catch (pushError) {
+        console.error('[Push] Error sending overtime update notification:', pushError);
+    }
 
     return NextResponse.json({ success: true, message: 'Status lembur berhasil diperbarui' });
   } catch (error) {

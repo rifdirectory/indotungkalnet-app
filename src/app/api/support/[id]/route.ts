@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getJakartaNow } from '@/lib/dateUtils';
-import { sendExpoPushNotification } from '@/lib/notifications';
+import { sendExpoPushNotification, notifySupportStatusChange } from '@/lib/notifications';
 
 export async function PUT(
   req: Request,
@@ -11,6 +11,14 @@ export async function PUT(
     const { id } = await params;
     const body = await req.json();
     const { category, priority, status, description, repair_description, assigned_to } = body;
+
+    // Fetch current ticket and customer info for comparison and notification
+    const [currentTicket]: any = await db.query('SELECT status, customer_name FROM support_tickets WHERE id = ?', [id]);
+    if (!currentTicket) {
+      return NextResponse.json({ success: false, message: 'Ticket not found' }, { status: 404 });
+    }
+    const oldStatus = currentTicket.status;
+    const customerName = currentTicket.customer_name;
 
     let timestampField = '';
     const nowStr = getJakartaNow();
@@ -32,6 +40,12 @@ export async function PUT(
 
     await db.query(query, queryParams);
 
+    // Trigger Multi-role notification for status change
+    const finalNewStatus = status === 'in_progress' || status === 'Sedang Dikerjakan' ? 'Sedang Dikerjakan' : (status === 'completed' || status === 'Resolved' ? 'Sudah Diperbaiki' : status);
+    if (finalNewStatus !== oldStatus) {
+      await notifySupportStatusChange(id, finalNewStatus, customerName, 'ticket');
+    }
+
     // Sync multi-assignees and identify NEW ones for notification
     if (Array.isArray(assigned_to)) {
       // 1. Get current assignees before update
@@ -40,6 +54,27 @@ export async function PUT(
       
       // 2. Identify new IDs that were NOT in oldIds
       const newIds = assigned_to.filter(empId => empId && !oldIds.includes(empId.toString()));
+
+      // 2.1 Validate availability for NEW assignees (Leave check)
+      if (newIds.length > 0) {
+        const today = getJakartaNow().split(' ')[0];
+        const leaveCheck: any = await db.query(`
+          SELECT e.full_name 
+          FROM leave_requests l
+          JOIN employees e ON l.employee_id = e.id
+          WHERE l.employee_id IN (?) 
+            AND l.status = 'approved' 
+            AND ? BETWEEN l.start_date AND l.end_date
+        `, [newIds, today]);
+
+        if (leaveCheck.length > 0) {
+          const names = leaveCheck.map((l: any) => l.full_name).join(', ');
+          return NextResponse.json({ 
+            success: false, 
+            message: `Pegawai berikut sedang dalam status izin: ${names}` 
+          }, { status: 400 });
+        }
+      }
 
       // 3. Perform sync (DELETE then INSERT)
       await db.query('DELETE FROM ticket_assignees WHERE ticket_id = ?', [id]);

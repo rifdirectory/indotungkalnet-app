@@ -56,11 +56,23 @@ export async function GET(req: Request) {
         const hasIn = allLogs.some((l: any) => l.type === 'clock_in');
         const hasOut = allLogs.some((l: any) => l.type === 'clock_out');
 
-        // 3. Determine Overall Status
+        // 3. Check for Approved Leave Today
+        const leaveCheck: any = await query(`
+            SELECT type FROM leave_requests 
+            WHERE employee_id = ? AND status = 'approved' 
+            AND ? BETWEEN start_date AND end_date
+        `, [employee_id, jakartaDate]);
+        const isOnLeave = (leaveCheck as any[]).length > 0;
+        const leaveType = isOnLeave ? leaveCheck[0].type : null;
+
+        // 4. Determine Overall Status
         let status = 'Belum Absen';
         let duration = 'Segera Absen!';
 
-        if (hasIn) {
+        if (isOnLeave) {
+            status = `Sedang ${leaveType.charAt(0).toUpperCase() + leaveType.slice(1)}`;
+            duration = 'Masa Izin/Cuti';
+        } else if (hasIn) {
             const inRecord = allLogs.find((l: any) => l.type === 'clock_in');
             status = inRecord.status === 'late' ? 'Terlambat' : 'Hadir';
             duration = 'Sedang Bekerja';
@@ -71,12 +83,12 @@ export async function GET(req: Request) {
             duration = 'Selesai';
         }
 
-        // 4. Calculate can_clock_out (Minutes from Midnight Jakarta)
+        // 5. Calculate can_clock_out (Minutes from Midnight Jakarta)
         const [eh, em] = sEnd.split(':').map(Number);
         const shiftEndMinutes = (eh * 60) + em;
         
         // can_clock_out only if already clocked in AND current time is >= shift end
-        const canClockOut = hasIn && !hasOut && (currentMinutes >= shiftEndMinutes);
+        const canClockOut = !isOnLeave && hasIn && !hasOut && (currentMinutes >= shiftEndMinutes);
 
         return NextResponse.json({
             success: true,
@@ -89,7 +101,9 @@ export async function GET(req: Request) {
                 shift_end: sEnd.substring(0, 5),
                 has_clocked_in: !!hasIn,
                 has_clocked_out: !!hasOut,
-                can_clock_out: !!canClockOut
+                can_clock_out: !!canClockOut,
+                is_on_leave: isOnLeave,
+                leave_type: leaveType
             }
         });
 

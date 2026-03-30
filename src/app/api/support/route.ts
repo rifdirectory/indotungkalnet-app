@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getJakartaNow } from '@/lib/dateUtils';
+import { sendExpoPushNotification } from '@/lib/notifications';
 
 export async function GET(req: Request) {
   try {
@@ -132,12 +133,55 @@ export async function POST(req: Request) {
       ? finalAssignees 
       : (finalAssignees ? [finalAssignees] : []);
 
+    // Validate availability (Leave check)
+    if (assigneesArray.length > 0) {
+      const today = getJakartaNow().split(' ')[0];
+      const leaveCheck: any = await db.query(`
+        SELECT e.id, e.full_name 
+        FROM leave_requests l
+        JOIN employees e ON l.employee_id = e.id
+        WHERE l.employee_id IN (?) 
+          AND l.status = 'approved' 
+          AND ? BETWEEN l.start_date AND l.end_date
+      `, [assigneesArray, today]);
+
+      if (leaveCheck.length > 0) {
+        const names = leaveCheck.map((l: any) => l.full_name).join(', ');
+        return NextResponse.json({ 
+          success: false, 
+          message: `Pegawai berikut sedang dalam status izin: ${names}` 
+        }, { status: 400 });
+      }
+    }
+
     for (const empId of assigneesArray) {
       if (empId) {
         await db.query(
           'INSERT IGNORE INTO ticket_assignees (ticket_id, employee_id) VALUES (?, ?)', 
           [Number(ticketId), empId]
         );
+      }
+    }
+
+    // Trigger Push Notifications for assignees
+    if (assigneesArray.length > 0) {
+      try {
+        const techniciansToNotify: any = await db.query(
+          'SELECT id, full_name, push_token FROM employees WHERE id IN (?) AND push_token IS NOT NULL',
+          [assigneesArray]
+        );
+
+        if (techniciansToNotify.length > 0) {
+          const tokens = techniciansToNotify.map((e: any) => e.push_token);
+          await sendExpoPushNotification(
+            tokens,
+            'Penugasan Tiket Baru 🛠️',
+            `Halo! Anda ditugaskan untuk menangani tiket #${ticketId} (${customer_name}). Silakan periksa detailnya di aplikasi mobile.`,
+            { ticketId: ticketId.toString(), customerName: customer_name }
+          );
+        }
+      } catch (pushError) {
+        console.error('[Push] Error sending ticket assignment notification:', pushError);
       }
     }
 

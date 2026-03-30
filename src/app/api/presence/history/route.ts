@@ -35,19 +35,35 @@ export async function GET(req: Request) {
         let history: any[] = [];
 
         if (employee_id) {
-            // MOBILE MODE: Fetch logs for specific employee
-            history = await query(`
-                SELECT a.*, e.full_name as employee_name, p.name as position_name, 
-                       s.name as shift_name, s.start_time as shift_start, s.end_time as shift_end
-                FROM attendance a
-                JOIN employees e ON a.employee_id = e.id
-                LEFT JOIN positions p ON e.position_id = p.id
-                LEFT JOIN employee_shifts es ON (a.employee_id = es.employee_id AND DATE(a.timestamp) = es.date)
-                LEFT JOIN shifts s ON es.shift_id = s.id
-                WHERE a.employee_id = ?
-                ORDER BY a.timestamp DESC
-                LIMIT ?
-            `, [employee_id, limit]);
+                // MOBILE MODE: Fetch logs for specific employee with date range support
+                const attendanceLogs = await query(`
+                    SELECT a.*, e.full_name as employee_name, p.name as position_name, 
+                           s.name as shift_name, s.start_time as shift_start, s.end_time as shift_end
+                    FROM attendance a
+                    JOIN employees e ON a.employee_id = e.id
+                    LEFT JOIN positions p ON e.position_id = p.id
+                    LEFT JOIN employee_shifts es ON (a.employee_id = es.employee_id AND DATE(a.timestamp) = es.date)
+                    LEFT JOIN shifts s ON es.shift_id = s.id
+                    WHERE a.employee_id = ? AND DATE(a.timestamp) BETWEEN ? AND ?
+                    ORDER BY a.timestamp DESC
+                    LIMIT ?
+                `, [employee_id, start, end, limit]);
+
+                // Also fetch approved leaves for the range
+                const leaves = await query(`
+                    SELECT id, employee_id, type, reason, status, approved_by, created_at,
+                           DATE_FORMAT(start_date, '%Y-%m-%d') as start_date,
+                           DATE_FORMAT(end_date, '%Y-%m-%d') as end_date
+                    FROM leave_requests 
+                    WHERE employee_id = ? AND status = 'approved' 
+                    AND (start_date <= ? AND end_date >= ?)
+                `, [employee_id, end, start]);
+
+                return NextResponse.json({ 
+                    success: true, 
+                    data: attendanceLogs,
+                    leaves: leaves
+                });
         } else {
             // DASHBOARD MODE: Fetch ALL active employees + their logs for the range
             // Using LEFT JOIN from employees table to ensure everyone shows up
@@ -91,9 +107,23 @@ export async function POST(req: Request) {
 
         console.log(`[Presence] POST ${type} for employee ${employee_id} at ${now.toISOString()} (Jakarta Minutes: ${currentMinutes})`);
 
-        // 0. Validate Inputs
+        // 0. Validate Inputs & Check Leave Status
         if (!employee_id || !type) {
             return NextResponse.json({ success: false, message: 'Data tidak lengkap' }, { status: 400 });
+        }
+
+        // Check if user is on approved leave today
+        const leaveCheck: any = await query(`
+            SELECT id, type FROM leave_requests 
+            WHERE employee_id = ? AND status = 'approved' 
+            AND ? BETWEEN start_date AND end_date
+        `, [employee_id, currentDate]);
+
+        if (leaveCheck && leaveCheck.length > 0) {
+            return NextResponse.json({ 
+                success: false, 
+                message: `Maaf, Anda sedang dalam masa ${leaveCheck[0].type} hari ini (Disetujui). Anda tidak dapat melakukan absen.` 
+            }, { status: 400 });
         }
 
         // 1. Sequence & Duplicate Guard

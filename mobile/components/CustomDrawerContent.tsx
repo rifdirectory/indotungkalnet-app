@@ -12,7 +12,9 @@ import {
   User, 
   ShieldCheck,
   Clock,
-  ChevronRight
+  ChevronRight,
+  FileText,
+  History
 } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
 
@@ -61,8 +63,14 @@ export default function CustomDrawerContent(props: any) {
     { label: 'Tugas Saya', icon: ClipboardCheck, path: '/tasks' },
   ];
 
-  const approvalItems = [
-    { label: 'Permohonan Izin', icon: Calendar, path: '/leave' },
+  const employeeItems = [
+    { label: 'Jadwal Shift', icon: Calendar, path: '/schedule' },
+    { label: 'Permohonan Izin', icon: FileText, path: '/leave' },
+    { label: 'Riwayat Absen', icon: History, path: '/history' },
+  ];
+
+  const managerialItems = [
+    { label: 'Persetujuan Izin', icon: ShieldCheck, path: '/approval-leave', hidden: !isPic },
     { label: 'Penugasan Lembur', icon: Clock, path: '/overtime', hidden: !isPic },
   ];
 
@@ -118,9 +126,9 @@ export default function CustomDrawerContent(props: any) {
 
           <View className="h-[1px] bg-slate-50 my-6 mx-2" />
 
-          <Text className="text-slate-300 text-[9px] font-black uppercase tracking-[2px] mb-4 ml-2">PENGAJUAN & IZIN</Text>
+          <Text className="text-slate-300 text-[9px] font-black uppercase tracking-[2px] mb-4 ml-2">PEGAWAI</Text>
           
-          {approvalItems.filter(i => !i.hidden).map((item, index) => {
+          {employeeItems.map((item, index) => {
             const isActive = pathname === item.path;
             return (
                 <TouchableOpacity
@@ -136,6 +144,30 @@ export default function CustomDrawerContent(props: any) {
                 </TouchableOpacity>
             );
           })}
+
+          {isPic && (
+            <>
+              <View className="h-[1px] bg-slate-50 my-6 mx-2" />
+              <Text className="text-slate-300 text-[9px] font-black uppercase tracking-[2px] mb-4 ml-2">MANAJERIAL</Text>
+              
+              {managerialItems.filter(i => !i.hidden).map((item, index) => {
+                const isActive = pathname === item.path;
+                return (
+                    <TouchableOpacity
+                        key={index}
+                        onPress={() => router.push(item.path as any)}
+                        className={`flex-row items-center py-4 px-2 rounded-2xl mb-1 ${isActive ? 'bg-blue-50/50' : 'active:bg-slate-50'}`}
+                    >
+                        <item.icon size={20} color={isActive ? '#0a84ff' : '#94a3b8'} strokeWidth={isActive ? 2.5 : 2} />
+                        <Text className={`ml-4 flex-1 font-bold text-sm ${isActive ? 'text-blue-600' : 'text-slate-600'}`}>
+                            {item.label}
+                        </Text>
+                        {isActive && <View className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-2" />}
+                    </TouchableOpacity>
+                );
+              })}
+            </>
+          )}
         </View>
       </DrawerContentScrollView>
 
