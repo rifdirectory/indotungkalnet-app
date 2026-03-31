@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getJakartaNow } from '@/lib/dateUtils';
+import { notifySupportStatusChange } from '@/lib/notifications';
 
 export async function GET(req: Request) {
     try {
@@ -157,15 +158,68 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
     try {
         const { employee_ids, title, description, due_date } = await req.json();
+        const assigneesArray = Array.isArray(employee_ids) ? employee_ids : (employee_ids ? [employee_ids] : []);
+        const primaryEmployeeId = assigneesArray.length > 0 ? assigneesArray[0] : null;
 
         const result = await db.query(
-            'INSERT INTO tasks (title, description, due_date) VALUES (?, ?, ?)',
-            [title, description, due_date]
+            'INSERT INTO tasks (title, description, due_date, employee_id) VALUES (?, ?, ?, ?)',
+            [title, description, due_date, primaryEmployeeId]
         );
         const taskId = (result as any).insertId;
+        
+        // Validate availability (Leave check)
+        if (assigneesArray.length > 0) {
+            const today = getJakartaNow().split(' ')[0];
+            const leaveCheck: any = await db.query(`
+                SELECT e.full_name 
+                FROM leave_requests l
+                JOIN employees e ON l.employee_id = e.id
+                WHERE l.employee_id IN (?) 
+                  AND l.status = 'approved' 
+                  AND ? BETWEEN l.start_date AND l.end_date
+            `, [assigneesArray, today]);
 
-        if (employee_ids && employee_ids.length > 0) {
-            for (const empId of employee_ids) {
+          if (leaveCheck.length > 0) {
+              const names = leaveCheck.map((l: any) => l.full_name).join(', ');
+              return NextResponse.json({ 
+                  success: false, 
+                  message: `Pegawai berikut sedang dalam status izin: ${names}` 
+              }, { status: 400 });
+          }
+
+          // 2.2 Validate availability (Shift check)
+          const nowStr = getJakartaNow();
+          const [jakartaDate, jakartaTime] = nowStr.split(' ');
+          const isSunday = new Date(jakartaDate).getDay() === 0;
+
+          const offShiftCheck: any = await db.query(`
+            SELECT e.full_name 
+            FROM employees e
+            LEFT JOIN positions p ON e.position_id = p.id
+            WHERE e.id IN (?)
+              AND NOT (
+                p.name LIKE '%NOC%'
+                OR (SELECT COUNT(*) FROM employee_shifts es 
+                    JOIN shifts s ON es.shift_id = s.id 
+                    WHERE es.employee_id = e.id AND es.date = ? AND ? BETWEEN s.start_time AND s.end_time) > 0
+                OR (SELECT COUNT(*) FROM attendance a 
+                    WHERE a.employee_id = e.id AND a.type = 'clock_in' AND DATE(a.timestamp) = ?) > 0
+                OR (p.use_presence = 1 AND ? != 0 AND ? BETWEEN '08:00:00' AND '16:00:00' 
+                    AND (SELECT COUNT(*) FROM employee_shifts es2 WHERE es2.employee_id = e.id AND es2.date = ?) = 0)
+              )
+          `, [assigneesArray, jakartaDate, jakartaTime, jakartaDate, isSunday ? 0 : 1, jakartaTime, jakartaDate]);
+
+          if (offShiftCheck.length > 0) {
+            const names = offShiftCheck.map((e: any) => e.full_name).join(', ');
+            return NextResponse.json({ 
+              success: false, 
+              message: `Pegawai berikut belum masuk shift / Off: ${names}` 
+            }, { status: 400 });
+          }
+        }
+
+        if (assigneesArray.length > 0) {
+            for (const empId of assigneesArray) {
                 await db.query('INSERT IGNORE INTO task_assignees (task_id, employee_id) VALUES (?, ?)', [taskId, empId]);
             }
         }
@@ -181,6 +235,24 @@ export async function PATCH(req: Request) {
     try {
         const { id, status, type, note } = await req.json();
         const nowStr = getJakartaNow();
+
+        // Fetch current status and info for notification
+        let oldStatus = '';
+        let itemName = 'Tugas';
+        
+        if (type === 'ticket') {
+            const [ticket]: any = await db.query('SELECT status, customer_name FROM support_tickets WHERE id = ?', [id]);
+            if (ticket) {
+                oldStatus = ticket.status;
+                itemName = ticket.customer_name;
+            }
+        } else {
+            const [task]: any = await db.query('SELECT status, title FROM tasks WHERE id = ?', [id]);
+            if (task) {
+                oldStatus = task.status;
+                itemName = task.title;
+            }
+        }
 
         if (type === 'ticket') {
             let timestampField = '';
@@ -209,6 +281,12 @@ export async function PATCH(req: Request) {
                 'UPDATE tasks SET status = ?, repair_description = ? WHERE id = ?',
                 [finalStatus, note || null, id]
             );
+        }
+
+        // Trigger Multi-role notification for status change
+        const finalNewStatus = status === 'in_progress' || status === 'Sedang Dikerjakan' ? 'Sedang Dikerjakan' : (status === 'completed' || status === 'Resolved' ? 'Sudah Diperbaiki' : status);
+        if (finalNewStatus !== oldStatus) {
+            await notifySupportStatusChange(id, finalNewStatus, itemName, type || 'manual');
         }
 
         return NextResponse.json({ success: true, message: 'Status berhasil diperbarui' });

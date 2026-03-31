@@ -1,5 +1,6 @@
 'use client';
-import { Sidebar } from "@/components/Sidebar";
+import dynamic from 'next/dynamic';
+const Sidebar = dynamic(() => import("@/components/Sidebar").then(mod => mod.Sidebar), { ssr: false });
 import { Header } from "@/components/Header";
 import { Box } from "@mui/material";
 

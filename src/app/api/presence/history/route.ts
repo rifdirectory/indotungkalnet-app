@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 
         if (employee_id) {
                 // MOBILE MODE: Fetch logs for specific employee with date range support
-                const attendanceLogs = await query(`
+                const attendanceLogs = (await query(`
                     SELECT a.*, e.full_name as employee_name, p.name as position_name, 
                            s.name as shift_name, s.start_time as shift_start, s.end_time as shift_end
                     FROM attendance a
@@ -47,27 +47,53 @@ export async function GET(req: Request) {
                     WHERE a.employee_id = ? AND DATE(a.timestamp) BETWEEN ? AND ?
                     ORDER BY a.timestamp DESC
                     LIMIT ?
-                `, [employee_id, start, end, limit]);
+                `, [employee_id, start, end, limit])) as any[];
 
                 // Also fetch approved leaves for the range
-                const leaves = await query(`
+                const leaves = (await query(`
                     SELECT id, employee_id, type, reason, status, approved_by, created_at,
                            DATE_FORMAT(start_date, '%Y-%m-%d') as start_date,
                            DATE_FORMAT(end_date, '%Y-%m-%d') as end_date
                     FROM leave_requests 
                     WHERE employee_id = ? AND status = 'approved' 
                     AND (start_date <= ? AND end_date >= ?)
-                `, [employee_id, end, start]);
+                `, [employee_id, end, start])) as any[];
 
                 return NextResponse.json({ 
                     success: true, 
                     data: attendanceLogs,
                     leaves: leaves
                 });
+        } else if (start === end) {
+            // DASHBOARD MODE (Daily): Consolidated view (1 row per employee)
+            history = (await query(`
+                SELECT 
+                    e.id as employee_id, e.full_name as employee_name, p.name as position_name,
+                    MIN(CASE WHEN a.type = 'clock_in' THEN a.timestamp END) as clock_in_time,
+                    MAX(CASE WHEN a.type = 'clock_out' THEN a.timestamp END) as clock_out_time,
+                    MAX(CASE WHEN a.type = 'clock_in' THEN a.status END) as clock_in_status,
+                    MAX(CASE WHEN a.type = 'clock_out' THEN a.status END) as clock_out_status,
+                    MAX(CASE WHEN a.type = 'clock_in' THEN a.note END) as clock_in_note,
+                    MAX(CASE WHEN a.type = 'clock_out' THEN a.note END) as clock_out_note,
+                    MAX(CASE WHEN a.type = 'clock_in' THEN a.photo_url END) as clock_in_photo,
+                    MAX(CASE WHEN a.type = 'clock_out' THEN a.photo_url END) as clock_out_photo,
+                    MAX(CASE WHEN a.type = 'clock_in' THEN a.location_lat END) as clock_in_lat,
+                    MAX(CASE WHEN a.type = 'clock_in' THEN a.location_lng END) as clock_in_lng,
+                    MAX(CASE WHEN a.type = 'clock_out' THEN a.location_lat END) as clock_out_lat,
+                    MAX(CASE WHEN a.type = 'clock_out' THEN a.location_lng END) as clock_out_lng,
+                    s.name as shift_name, s.start_time as shift_start, s.end_time as shift_end
+                FROM employees e
+                LEFT JOIN positions p ON e.position_id = p.id
+                LEFT JOIN attendance a ON (e.id = a.employee_id AND DATE(a.timestamp) = ?)
+                LEFT JOIN employee_shifts es ON (e.id = es.employee_id AND es.date = ?)
+                LEFT JOIN shifts s ON es.shift_id = s.id
+                WHERE e.status = 'active'
+                GROUP BY e.id, e.full_name, p.name, s.name, s.start_time, s.end_time
+                ORDER BY e.full_name ASC
+            `, [start, start])) as any[];
         } else {
-            // DASHBOARD MODE: Fetch ALL active employees + their logs for the range
-            // Using LEFT JOIN from employees table to ensure everyone shows up
-            history = await query(`
+            // DASHBOARD MODE (Range): List of events
+            history = (await query(`
                 SELECT 
                     e.id as employee_id, e.full_name as employee_name, p.name as position_name,
                     a.id as log_id, a.type, a.status, a.timestamp, a.note, a.photo_url, 
@@ -81,7 +107,7 @@ export async function GET(req: Request) {
                 WHERE e.status = 'active'
                 ORDER BY e.full_name ASC, a.timestamp DESC
                 LIMIT ?
-            `, [start, end, limit]);
+            `, [start, end, limit])) as any[];
         }
 
         return NextResponse.json({ 
@@ -179,11 +205,15 @@ export async function POST(req: Request) {
             const [eh, em] = endStr.split(':').map(Number);
             const shiftEndMinutes = (eh * 60) + em;
 
-            // Block early clock-out
-            if (currentMinutes < shiftEndMinutes) {
+            // Block extremely early clock-out (Allowed up to 10 minutes before shift ends)
+            if (currentMinutes < (shiftEndMinutes - 10)) {
+                const targetHour = Math.floor((shiftEndMinutes - 10) / 60);
+                const targetMin = (shiftEndMinutes - 10) % 60;
+                const timeStr = `${String(targetHour).padStart(2, '0')}:${String(targetMin).padStart(2, '0')}`;
+
                 return NextResponse.json({ 
                     success: false, 
-                    message: `Belum waktunya pulang. Shift Anda berakhir jam ${endStr.substring(0, 5)}.` 
+                    message: `Terlalu awal untuk absen pulang. Sesuai aturan, Anda baru bisa absen maksimal 10 menit sebelum pukul ${endStr.substring(0, 5)} (Mulai pukul ${timeStr}).` 
                 }, { status: 400 });
             }
         }

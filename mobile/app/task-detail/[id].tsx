@@ -100,7 +100,8 @@ export default function TaskDetailScreen() {
     closed: { label: 'DITUTUP', color: '#16a34a', bg: '#f0fdf4', icon: <CheckCircle2 size={16} color="#16a34a" /> },
     resolved: { label: 'VERIFIKASI', color: '#a855f7', bg: '#f3e8ff', icon: <Clock size={16} color="#a855f7" /> },
     in_progress: { label: 'PROSES', color: '#0a84ff', bg: '#eff6ff', icon: <PlayCircle size={16} color="#0a84ff" /> },
-    otw: { label: 'OTW', color: '#f97316', bg: '#fff7ed', icon: <MapPin size={16} color="#f97316" /> }
+    otw: { label: 'OTW', color: '#f97316', bg: '#fff7ed', icon: <MapPin size={16} color="#f97316" /> },
+    dibatalkan: { label: 'DIBATALKAN', color: '#ef4444', bg: '#fee2e2', icon: <X size={16} color="#ef4444" /> }
   };
 
   const getStatusInfo = (status: string) => {
@@ -237,6 +238,26 @@ export default function TaskDetailScreen() {
       {!['resolved', 'completed', 'closed', 'selesai'].includes(task.status.toLowerCase()) && (
         <View className="absolute bottom-0 left-0 right-0 p-6 bg-white border-t border-slate-100 shadow-2xl">
           <View className="flex-row items-center space-x-3">
+              {/* Cancel Button */}
+              {(task.status.toLowerCase() === 'open' || task.status.toLowerCase() === 'pending') && (
+                  <TouchableOpacity 
+                      onPress={() => {
+                        Alert.alert(
+                          'Batal Tugas',
+                          'Apakah Anda yakin ingin membatalkan tugas ini?',
+                          [
+                            { text: 'Tidak', style: 'cancel' },
+                            { text: 'Ya, Batal', style: 'destructive', onPress: () => updateStatus('Dibatalkan') }
+                          ]
+                        );
+                      }}
+                      className="bg-slate-50 h-16 px-6 rounded-3xl items-center flex-row justify-center border border-slate-200"
+                  >
+                      <X size={20} color="#ef4444" />
+                      <Text className="text-red-500 font-black ml-2 uppercase tracking-tight text-[10px]">Batal</Text>
+                  </TouchableOpacity>
+              )}
+
               {/* OTW Button */}
               {(task.status.toLowerCase() === 'open' || task.status.toLowerCase() === 'pending') && isTicket && (
                   <TouchableOpacity 

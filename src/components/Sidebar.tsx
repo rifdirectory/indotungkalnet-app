@@ -44,7 +44,16 @@ import { Collapse } from '@mui/material';
 
 const drawerWidth = 260;
 
-const menuItems = [
+interface MenuItem {
+  icon: React.ReactNode;
+  label: string;
+  href: string;
+  disabled?: boolean;
+  info?: string;
+  subItems?: { label: string; href: string }[];
+}
+
+const menuItems: MenuItem[] = [
   { icon: <DashboardIcon />, label: "Dashboard", href: "/" },
   { icon: <PeopleIcon />, label: "Data Customer", href: "/customers" },
   { 
@@ -59,7 +68,7 @@ const menuItems = [
     ]
   },
   { icon: <FinanceIcon />, label: "Laporan Keuangan", href: "#", disabled: true },
-  { icon: <InventoryIcon />, label: "Inventory", href: "/inventory" },
+  { icon: <InventoryIcon />, label: "Inventory", href: "#", disabled: true },
   { 
     icon: <BadgeIcon />, 
     label: "Data Pegawai", 
@@ -71,7 +80,7 @@ const menuItems = [
   },
   { icon: <MaintenanceIcon />, label: "Maintenance", href: "/maintenance" },
   { icon: <TicketIcon />, label: "Tiketing", href: "/support" },
-  { icon: <ScheduleIcon />, label: "Penugasan", href: "/tasks" },
+  // { icon: <ScheduleIcon />, label: "Penugasan", href: "/tasks" },
   { 
     icon: <PresenceIcon />, 
     label: "Presensi", 
@@ -134,6 +143,21 @@ function SidebarContent() {
     setOpenMenus(prev => ({ ...prev, [label]: !prev[label] }));
   };
 
+  if (!mounted) {
+    return (
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ width: 40, height: 40, borderRadius: 3, bgcolor: 'primary.main' }} />
+          <Box>
+            <Typography variant="h6" sx={{ lineHeight: 1, fontWeight: 700 }}>ITNET</Typography>
+            <Typography variant="caption" color="text.secondary">ISP Management</Typography>
+          </Box>
+        </Box>
+        <List sx={{ flexGrow: 1, px: 2 }} />
+      </Box>
+    );
+  }
+
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -158,7 +182,7 @@ function SidebarContent() {
       </Box>
 
 
-      <List sx={{ flexGrow: 1, px: 2 }}>
+      <List sx={{ flexGrow: 1, px: 2 }} suppressHydrationWarning>
         {menuItems.map((item) => {
           const hasSubItems = !!item.subItems;
           const isOpen = mounted ? openMenus[item.label] : (item.label === "Data Produk");

@@ -505,6 +505,7 @@ export default function SupportPageContent() {
                           ticket.status === 'OTW' ? 'info.main' :
                           ticket.status === 'Sedang Dikerjakan' ? 'primary.main' : 
                           ticket.status === 'Sudah Diperbaiki' ? 'secondary.main' : 
+                          ticket.status === 'Dibatalkan' ? 'error.main' :
                           'success.main',
                         borderRadius: 3,
                         border: '1px solid'
@@ -527,6 +528,10 @@ export default function SupportPageContent() {
                   const isOff = tech.current_status === 'Off';
                   const isOnSite = tech.current_status === 'On-Site';
                   const isFree = tech.current_status === 'Free';
+                  const isIzin = tech.current_status === 'Izin';
+                  
+                  const statusColor = isIzin ? theme.palette.error.main : (isOnSite ? theme.palette.warning.main : (isFree ? theme.palette.success.main : theme.palette.text.disabled));
+                  const statusBg = isIzin ? alpha(theme.palette.error.main, 0.1) : (isOnSite ? alpha(theme.palette.warning.main, 0.1) : (isFree ? alpha(theme.palette.success.main, 0.1) : 'rgba(0, 0, 0, 0.02)'));
                   
                   return (
                     <Stack key={i} direction="row" justifyContent="space-between" alignItems="center">
@@ -536,24 +541,24 @@ export default function SupportPageContent() {
                           height: 32, 
                           fontSize: '0.75rem', 
                           fontWeight: 700, 
-                          bgcolor: isOff ? 'rgba(0, 0, 0, 0.02)' : alpha(isOnSite ? theme.palette.warning.main : theme.palette.success.main, 0.1), 
-                          color: isOff ? 'text.disabled' : (isOnSite ? 'warning.main' : 'success.main'),
+                          bgcolor: statusBg, 
+                          color: statusColor,
                           border: '1px solid rgba(0, 0, 0, 0.06)', 
                           borderRadius: 3,
-                          opacity: isOff ? 0.5 : 1
+                          opacity: (isOff || isIzin) ? 0.6 : 1
                         }}>
                           {tech.full_name?.charAt(0)}
                         </Avatar>
                         <Typography variant="body2" sx={{ 
                           fontWeight: 700, 
-                          color: isOff ? 'text.disabled' : 'text.primary',
+                          color: (isOff || isIzin) ? 'text.disabled' : 'text.primary',
                           transition: 'color 0.3s',
                           display: 'flex',
                           alignItems: 'center',
                           gap: 1
                         }}>
                           {tech.full_name}
-                          {tech.total_field_tasks_filtered > 0 && (
+                          {tech.total_field_tasks_filtered > 0 && !isIzin && (
                             <Box component="span" sx={{ 
                               fontSize: '0.65rem', 
                               bgcolor: isOff ? 'rgba(0,0,0,0.1)' : (isOnSite ? 'warning.main' : 'success.main'), 
@@ -572,11 +577,12 @@ export default function SupportPageContent() {
                       <Stack direction="row" spacing={0.5} alignItems="center">
                         {isOnSite && <EngineeringIcon sx={{ fontSize: '1rem', color: 'warning.main' }} />}
                         {isFree && <CoffeeIcon sx={{ fontSize: '1rem', color: 'success.main' }} />}
-                        {isOff && <FiberManualRecordIcon sx={{ fontSize: '0.6rem', color: 'text.disabled' }} />}
+                        {isIzin && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'error.main' }} />}
+                        {isOff && !isIzin && <FiberManualRecordIcon sx={{ fontSize: '0.6rem', color: 'text.disabled' }} />}
                         
                         <Typography variant="caption" sx={{ 
                           fontWeight: 900, 
-                          color: isOnSite ? 'warning.main' : (isFree ? 'success.main' : 'text.disabled'), 
+                          color: statusColor, 
                           textTransform: 'uppercase',
                           fontSize: '0.65rem',
                           letterSpacing: 0.5
@@ -806,6 +812,23 @@ export default function SupportPageContent() {
                   </Button>
                 )}
 
+                {selectedTicket.status === 'Open' && (
+                  <Button 
+                    variant="outlined" 
+                    color="error" 
+                    size="small"
+                    startIcon={<CloseIcon />}
+                    onClick={() => {
+                      if (window.confirm('Apakah Anda yakin ingin membatalkan tiket ini?')) {
+                        handleStatusUpdate('Dibatalkan');
+                      }
+                    }}
+                    sx={{ p: 1.2, fontWeight: 900, borderRadius: 3, letterSpacing: 0.5 }}
+                  >
+                    BATALKAN TIKET
+                  </Button>
+                )}
+
                 <IconButton onClick={() => setDetailOpen(false)} sx={{ ml: 1 }}>
                   <CloseIcon />
                 </IconButton>
@@ -826,12 +849,14 @@ export default function SupportPageContent() {
                       options={technicians}
                       disabled={selectedTicket.status === 'Selesai'}
                       getOptionLabel={(option) => option.id ? option.full_name : ''}
+                      getOptionDisabled={(option) => option.current_status === 'Izin' || option.current_status === 'Off'}
                       isOptionEqualToValue={(option, value) => option.id === value.id}
                       value={employees.filter(e => (editForm.assigned_to || []).includes(e.id.toString()))}
                       onChange={(_, value) => setEditForm(prev => ({ ...prev, assigned_to: value.map(v => v.id.toString()) }))}
                       renderTags={() => null}
                       renderOption={(props, option, { selected }) => {
                         const { key, ...optionProps } = props;
+                        const isIzin = option.current_status === 'Izin';
                         return (
                           <li key={option.id} {...optionProps}>
                             <Checkbox
@@ -839,8 +864,18 @@ export default function SupportPageContent() {
                               checkedIcon={<CheckBoxIcon fontSize="small" />}
                               style={{ marginRight: 8 }}
                               checked={selected}
+                              disabled={isIzin || option.current_status === 'Off'}
                             />
-                            {option.full_name} ({option.position_name})
+                            <Box sx={{ flexGrow: 1, opacity: (isIzin || option.current_status === 'Off') ? 0.5 : 1 }}>
+                              <Typography variant="body2" sx={{ fontWeight: (isIzin || option.current_status === 'Off') ? 400 : 600 }}>
+                                {option.full_name} 
+                                {isIzin && <Typography component="span" variant="caption" sx={{ ml: 1, color: 'error.main', fontWeight: 900 }}>(SEDANG IZIN)</Typography>}
+                                {option.current_status === 'Off' && !isIzin && <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.disabled', fontWeight: 900 }}>(BELUM MASUK / OFF)</Typography>}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {option.position_name} • <span style={{ color: option.current_status === 'Free' ? '#2e7d32' : 'inherit' }}>{option.current_status}</span>
+                              </Typography>
+                            </Box>
                           </li>
                         );
                       }}
@@ -1094,35 +1129,35 @@ export default function SupportPageContent() {
                 </Button>
               )}
               
-              {selectedTicket.status !== 'Selesai' && (
-                <Button 
-                  variant="outlined"
-                  onClick={() => handleStatusUpdate(
-                    selectedTicket.status === 'Open' ? 'OTW' :
-                    selectedTicket.status === 'OTW' ? 'Sedang Dikerjakan' :
-                    selectedTicket.status === 'Sedang Dikerjakan' ? 'Resolved' :
-                    'Selesai'
-                  )}
-                  sx={{ 
-                    height: 42,
-                    px: 4,
-                    borderRadius: 2.5,
-                    fontWeight: 900, 
-                    fontSize: '0.85rem',
-                    letterSpacing: 1.2,
-                    borderColor: 'divider'
-                  }}
-                >
-                  {
-                    selectedTicket.status === 'Open' ? 'OTW KE LOKASI' :
-                    selectedTicket.status === 'OTW' ? 'MULAI KERJAKAN' :
-                    selectedTicket.status === 'Sedang Dikerjakan' ? 'TANDAI SELESAI' :
-                    selectedTicket.status === 'Resolved' ? 'TUTUP TIKET' : 'PROSES'
-                  }
-                </Button>
+              {(selectedTicket.status !== 'Selesai' && selectedTicket.status !== 'Dibatalkan') && (
+                  <Button 
+                    variant="outlined"
+                    onClick={() => handleStatusUpdate(
+                      selectedTicket.status === 'Open' ? 'OTW' :
+                      selectedTicket.status === 'OTW' ? 'Sedang Dikerjakan' :
+                      selectedTicket.status === 'Sedang Dikerjakan' ? 'Resolved' :
+                      'Selesai'
+                    )}
+                    sx={{ 
+                      height: 42,
+                      px: 4,
+                      borderRadius: 2.5,
+                      fontWeight: 900, 
+                      fontSize: '0.85rem',
+                      letterSpacing: 1.2,
+                      borderColor: 'divider'
+                    }}
+                  >
+                    {
+                      selectedTicket.status === 'Open' ? 'OTW KE LOKASI' :
+                      selectedTicket.status === 'OTW' ? 'MULAI KERJAKAN' :
+                      selectedTicket.status === 'Sedang Dikerjakan' ? 'TANDAI SELESAI' :
+                      selectedTicket.status === 'Resolved' ? 'TUTUP TIKET' : 'PROSES'
+                    }
+                  </Button>
               )}
             </Box>
-            {selectedTicket.status === 'Selesai' && (
+            {(selectedTicket.status === 'Selesai' || selectedTicket.status === 'Dibatalkan') && (
               <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }} />
             )}
           </>

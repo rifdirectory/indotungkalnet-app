@@ -12,6 +12,7 @@ export async function GET(request: Request) {
     const picId = searchParams.get('pic_id');
     const month = searchParams.get('month');
     const year = searchParams.get('year');
+    const search = searchParams.get('search');
 
     let sql = `
       SELECT l.*, e.full_name as employee_name, p.name as position_name
@@ -40,6 +41,11 @@ export async function GET(request: Request) {
     if (month && year) {
       whereClauses.push('MONTH(l.start_date) = ? AND YEAR(l.start_date) = ?');
       params.push(month, year);
+    }
+
+    if (search) {
+      whereClauses.push('e.full_name LIKE ?');
+      params.push(`%${search}%`);
     }
 
     if (whereClauses.length > 0) {

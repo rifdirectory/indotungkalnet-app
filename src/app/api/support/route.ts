@@ -97,28 +97,54 @@ export async function POST(req: Request) {
 
       const autoAssignee: any = await db.query(`
         SELECT e.id, e.full_name,
-               COUNT(t.id) as ticket_count,
-               COALESCE(SUM(CASE 
-                 WHEN t.difficulty = 'High' THEN 3
-                 WHEN t.difficulty = 'Medium' THEN 2
-                 WHEN t.difficulty = 'Low' THEN 1
-                 ELSE 0
-               END), 0) as workload,
-               MAX(t.created_at) as last_assigned
+               -- Current active workload (OTW or Working)
+               (SELECT COUNT(*) FROM ticket_assignees ta2 
+                JOIN support_tickets t2 ON ta2.ticket_id = t2.id 
+                WHERE ta2.employee_id = e.id AND t2.status IN ('OTW', 'Sedang Dikerjakan')
+               ) as active_tasks,
+               -- Total task burden today (cumulative)
+               (SELECT COUNT(*) FROM ticket_assignees ta3 
+                JOIN support_tickets t3 ON ta3.ticket_id = t3.id 
+                WHERE ta3.employee_id = e.id AND DATE(t3.created_at) = ?
+               ) as total_tasks_today,
+               -- Recency check (last assigned)
+               (SELECT MAX(t4.created_at) FROM ticket_assignees ta4 
+                JOIN support_tickets t4 ON ta4.ticket_id = t4.id 
+                WHERE ta4.employee_id = e.id
+               ) as last_assigned
         FROM employees e
         JOIN positions p ON e.position_id = p.id
-        JOIN employee_shifts es ON e.id = es.employee_id AND es.date = ?
-        JOIN shifts s ON es.shift_id = s.id
-        LEFT JOIN ticket_assignees ta ON e.id = ta.employee_id
-        LEFT JOIN support_tickets t ON ta.ticket_id = t.id AND t.status NOT IN ('Resolved', 'Closed')
-        WHERE p.name LIKE '%Teknisi%'
+        WHERE e.status = 'active'
+          AND p.name LIKE '%Teknisi%'
           AND e.full_name != 'Wisnu Rachmawan'
-          AND e.status = 'active'
-          AND ? BETWEEN s.start_time AND s.end_time
+          -- Must NOT be on leave today
+          AND NOT EXISTS (
+            SELECT 1 FROM leave_requests l 
+            WHERE l.employee_id = e.id AND l.status = 'approved' AND ? BETWEEN l.start_date AND l.end_date
+          )
+          -- Must be available now based on shift/attendance/fallback
+          AND (
+            p.name LIKE '%NOC%'
+            OR EXISTS (
+              SELECT 1 FROM employee_shifts es 
+              JOIN shifts s ON es.shift_id = s.id 
+              WHERE es.employee_id = e.id AND es.date = ? AND ? BETWEEN s.start_time AND s.end_time
+            )
+            OR EXISTS (
+              SELECT 1 FROM attendance a 
+              WHERE a.employee_id = e.id AND a.type = 'clock_in' AND DATE(a.timestamp) = ?
+            )
+            OR (
+              p.use_presence = 1 
+              AND DAYOFWEEK(?) != 1 -- NOT Sunday
+              AND ? BETWEEN '08:00:00' AND '16:00:00'
+              AND NOT EXISTS (SELECT 1 FROM employee_shifts es2 WHERE es2.employee_id = e.id AND es2.date = ?)
+            )
+          )
         GROUP BY e.id
-        ORDER BY ticket_count ASC, workload ASC, last_assigned ASC, RAND()
+        ORDER BY active_tasks ASC, total_tasks_today ASC, last_assigned ASC, RAND()
         LIMIT 2
-      `, [jakartaDate, jakartaTime]);
+      `, [jakartaDate, jakartaDate, jakartaDate, jakartaTime, jakartaDate, jakartaDate, jakartaTime, jakartaDate]);
       
       if (autoAssignee && autoAssignee.length > 0) {
         console.log(`Auto-assigning technicians: ${autoAssignee.map((a: any) => `${a.full_name} (W:${a.workload})`).join(', ')}`);
@@ -150,6 +176,35 @@ export async function POST(req: Request) {
         return NextResponse.json({ 
           success: false, 
           message: `Pegawai berikut sedang dalam status izin: ${names}` 
+        }, { status: 400 });
+      }
+
+      // 2.2 Validate availability (Shift check)
+      const [jakartaDate, jakartaTime] = getJakartaNow().split(' ');
+      const isSunday = new Date(jakartaDate).getDay() === 0;
+
+      const offShiftCheck: any = await db.query(`
+        SELECT e.full_name 
+        FROM employees e
+        LEFT JOIN positions p ON e.position_id = p.id
+        WHERE e.id IN (?)
+          AND NOT (
+            p.name LIKE '%NOC%'
+            OR (SELECT COUNT(*) FROM employee_shifts es 
+                JOIN shifts s ON es.shift_id = s.id 
+                WHERE es.employee_id = e.id AND es.date = ? AND ? BETWEEN s.start_time AND s.end_time) > 0
+            OR (SELECT COUNT(*) FROM attendance a 
+                WHERE a.employee_id = e.id AND a.type = 'clock_in' AND DATE(a.timestamp) = ?) > 0
+            OR (p.use_presence = 1 AND ? != 0 AND ? BETWEEN '08:00:00' AND '16:00:00' 
+                AND (SELECT COUNT(*) FROM employee_shifts es2 WHERE es2.employee_id = e.id AND es2.date = ?) = 0)
+          )
+      `, [assigneesArray, jakartaDate, jakartaTime, jakartaDate, isSunday ? 0 : 1, jakartaTime, jakartaDate]);
+
+      if (offShiftCheck.length > 0) {
+        const names = offShiftCheck.map((e: any) => e.full_name).join(', ');
+        return NextResponse.json({ 
+          success: false, 
+          message: `Pegawai berikut belum masuk shift / Off: ${names}` 
         }, { status: 400 });
       }
     }

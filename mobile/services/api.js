@@ -4,7 +4,7 @@ import Constants from 'expo-constants';
 
 // Deteksi IP laptop secara otomatis
 const hostUri = Constants.expoConfig?.hostUri;
-const host = hostUri ? hostUri.split(':')[0] : '192.168.1.5';
+const host = hostUri ? hostUri.split(':')[0] : '192.168.1.4';
 
 // Alamat API Backend
 // Android Emulator menggunakan 10.0.2.2 untuk akses localhost komputer host

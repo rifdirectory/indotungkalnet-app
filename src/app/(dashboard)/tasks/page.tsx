@@ -62,10 +62,13 @@ export default function TasksPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(formData)
     });
-    if (res.ok) {
+    const data = await res.json();
+    if (data.success) {
       setOpen(false);
       setFormData({ employee_ids: [], title: '', description: '', due_date: '' });
       fetchData();
+    } else {
+      alert(data.message || 'Gagal membuat tugas');
     }
   };
 
@@ -175,8 +178,10 @@ export default function TasksPage() {
               getOptionLabel={(option) => option.full_name}
               value={employees.filter(e => formData.employee_ids.includes(e.id))}
               onChange={(_, value) => setFormData({ ...formData, employee_ids: value.map(v => v.id) })}
+              getOptionDisabled={(option) => option.current_status === 'Izin'}
               renderOption={(props, option, { selected }) => {
                 const { key, ...optionProps } = props;
+                const isIzin = option.current_status === 'Izin';
                 return (
                   <li key={key} {...optionProps}>
                     <Checkbox
@@ -184,8 +189,17 @@ export default function TasksPage() {
                       checkedIcon={checkedIcon}
                       style={{ marginRight: 8 }}
                       checked={selected}
+                      disabled={isIzin}
                     />
-                    {option.full_name}
+                    <Box sx={{ flexGrow: 1, opacity: isIzin ? 0.5 : 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: isIzin ? 400 : 600 }}>
+                            {option.full_name} 
+                            {isIzin && <Typography component="span" variant="caption" sx={{ ml: 1, color: 'error.main', fontWeight: 900 }}>(SEDANG IZIN)</Typography>}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                            {option.position_name}
+                        </Typography>
+                    </Box>
                   </li>
                 );
               }}

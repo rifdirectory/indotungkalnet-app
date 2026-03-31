@@ -1,150 +1,153 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
-  Box, 
-  Typography, 
-  Stack, 
-  Button, 
-  Card, 
-  Grid, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  InputBase,
-  Chip,
-  alpha,
-  useTheme
+  Box, Typography, Stack, Button, Card, Table, TableBody, TableCell, 
+  TableContainer, TableHead, TableRow, alpha, useTheme, Avatar, 
+  Chip, TextField, InputAdornment, Grid, Paper, IconButton
 } from "@mui/material";
 import { 
-  Inventory as InventoryIcon, 
-  Smartphone as SmartphoneIcon, 
-  Router as CpuIcon, 
-  Add as AddIcon, 
+  Inventory as InventoryIcon,
   Search as SearchIcon,
-  Warning as WarningIcon
+  Add as AddIcon,
+  FilterList as FilterIcon,
+  MoreVert as MoreIcon,
+  Business as WarehouseIcon,
+  Warning as WarningIcon,
+  ArrowUpward as OutIcon,
+  ArrowDownward as InIcon
 } from "@mui/icons-material";
 
 export default function InventoryPage() {
   const theme = useTheme();
-  const [stockItems, setStockItems] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    fetch('/api/inventory')
-      .then(res => res.json())
-      .then(data => {
-        if(data.success) setStockItems(Array.isArray(data.data) ? data.data : []);
-      });
-  }, []);
+  // Mock Data for UI
+  const inventoryItems = [
+    { id: 1, name: 'Modem FiberHome HG6145F', category: 'ONU/ONT', stock: 45, unit: 'Unit', status: 'In Stock', location: 'Gudang Utama' },
+    { id: 2, name: 'Kabel Dropcore 1 Core 1000m', category: 'Kabel', stock: 12, unit: 'Roll', status: 'Low Stock', location: 'Gudang Utama' },
+    { id: 3, name: 'Patch-cord SC-UPC 3m', category: 'Aksesoris', stock: 150, unit: 'Pcs', status: 'In Stock', location: 'Gudang Utama' },
+    { id: 4, name: 'SFP OLT C++', category: 'Network', stock: 5, unit: 'Unit', status: 'Critical', location: 'Core Room' },
+    { id: 5, name: 'Mikrotik RB1100AHx4', category: 'Router', stock: 2, unit: 'Unit', status: 'In Stock', location: 'Core Room' },
+  ];
+
+  const stats = [
+    { label: 'Total Item', value: '124', icon: <InventoryIcon />, color: 'primary' },
+    { label: 'Menipis', value: '8', icon: <WarningIcon />, color: 'warning' },
+    { label: 'Masuk (Bulan Ini)', value: '450', icon: <InIcon />, color: 'success' },
+    { label: 'Keluar (Bulan Ini)', value: '312', icon: <OutIcon />, color: 'error' },
+  ];
 
   return (
     <Box sx={{ p: { xs: 3, md: 5 } }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2} sx={{ mb: 5 }}>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.02em' }}>
-                Inventory & Stock
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-                Kelola perangkat network dan perlengkapan teknisi ITNET.
-              </Typography>
-            </Box>
-            <Button 
-              variant="contained" 
-              startIcon={<AddIcon />}
-              sx={{ borderRadius: 3, 
-fontWeight: 600 }}
-            >
-              Tambah Barang
-            </Button>
-          </Stack>
-
-          <Grid container spacing={3} sx={{ mb: 5 }}>
-            {[
-              { label: "Total Items", value: "452", icon: <InventoryIcon />, color: 'success.main' },
-              { label: "ONT/ONU Deployed", value: "1,120", icon: <SmartphoneIcon />, color: 'warning.main' },
-              { label: "Router Stock", value: "28", icon: <CpuIcon />, color: 'primary.main' },
-              { label: "Low Stock Alerts", value: "4 Items", icon: <WarningIcon />, color: 'error.main' },
-            ].map((stat) => (
-              <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={stat.label}>
-                <Card sx={{ p: 3, borderBottom: '3px solid', borderBottomColor: stat.color, borderRadius: 3 }}>
-                  <Box sx={{ color: stat.color, mb: 1.5 }}>{stat.icon}</Box>
-                  <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stat.label}</Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 700, mt: 0.5 }}>{stat.value}</Typography>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-
-          <Card sx={{ overflow: 'hidden', borderRadius: 3 }}>
-            <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'rgba(0, 0, 0, 0.01)' }}>
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                bgcolor: 'rgba(0, 0, 0, 0.03)', 
-                px: 2, 
-                py: 0.75, 
-                borderRadius: 3,
-                width: 320,
-                border: '1px solid rgba(0, 0, 0, 0.06)',
-              }}>
-                <SearchIcon sx={{ color: 'text.secondary', mr: 1, fontSize: 18 }} />
-                <InputBase
-                  placeholder="Cari perangkat, SN, atau brand..."
-                  sx={{ color: 'text.primary', fontSize: '0.875rem', width: '100%' }}
-                />
-              </Box>
-            </Box>
-
-            <TableContainer>
-              <Table>
-                <TableHead sx={{ bgcolor: '#f1f3f4' }}>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>Item Name</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>Category</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>Brand</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>Current Stock</TableCell>
-                    <TableCell sx={{ fontWeight: 600, color: 'text.secondary' }}>Status</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {stockItems.map((item) => (
-                    <TableRow key={item.id} hover>
-                      <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>{item.item_name}</TableCell>
-                      <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{item.category}</TableCell>
-                      <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{item.item_code}</TableCell>
-                      <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>{item.stock} Unit</TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={item.status} 
-                          size="small" 
-                          sx={{ 
-                            height: 22, 
-                            fontSize: '0.625rem', 
-                            fontWeight: 800, 
-                            textTransform: 'uppercase',
-                            bgcolor: alpha(
-                              item.status === 'In Stock' ? theme.palette.success.main : 
-                              item.status === 'Low Stock' ? theme.palette.warning.main : 
-                              theme.palette.error.main, 0.1
-                            ),
-                            color: 
-                              item.status === 'In Stock' ? 'success.main' : 
-                              item.status === 'Low Stock' ? 'warning.main' : 
-                              'error.main',
-                            borderRadius: 3,
-                            border: '1px solid'
-                          }} 
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Card>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 5 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 2 }}>
+            <InventoryIcon color="primary" /> Inventaris Barang
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
+            Manajemen stok material dan perangkat jaringan ITNET.
+          </Typography>
         </Box>
+        <Button 
+          variant="contained" 
+          startIcon={<AddIcon />}
+          sx={{ borderRadius: 3, px: 3, py: 1.2, fontWeight: 700, boxShadow: '0 8px 16px rgba(0,0,0,0.1)' }}
+        >
+          Tambah Barang
+        </Button>
+      </Stack>
+
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        {stats.map((stat, idx) => {
+          const color = (theme.palette as any)[stat.color]?.main || theme.palette.primary.main;
+          return (
+            <Grid key={idx} size={{ xs: 12, sm: 6, md: 3 }}>
+              <Paper sx={{ p: 3, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+                <Avatar sx={{ bgcolor: alpha(color, 0.1), color: `${stat.color}.main`, width: 56, height: 56 }}>
+                  {stat.icon}
+                </Avatar>
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>{stat.label}</Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 800 }}>{stat.value}</Typography>
+                </Box>
+              </Paper>
+            </Grid>
+          );
+        })}
+      </Grid>
+
+      <Card sx={{ borderRadius: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+        <Box sx={{ p: 3, borderBottom: '1px solid #f0f0f0', display: 'flex', gap: 2, alignItems: 'center' }}>
+          <TextField
+            placeholder="Cari barang atau kategori..."
+            size="small"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            sx={{ flexGrow: 1, '& .MuiOutlinedInput-root': { borderRadius: 3 } }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon color="disabled" />
+                </InputAdornment>
+              ),
+            }}
+          />
+          <IconButton sx={{ bgcolor: '#f5f5f5', borderRadius: 2 }}>
+            <FilterIcon />
+          </IconButton>
+        </Box>
+
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
+                <TableCell sx={{ fontWeight: 800, pl: 4 }}>BARANG</TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>KATEGORI</TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>STOK</TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>LOKASI</TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>STATUS</TableCell>
+                <TableCell sx={{ fontWeight: 800, pr: 4 }} align="right">AKSI</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {inventoryItems.map((item) => (
+                <TableRow key={item.id} hover>
+                  <TableCell sx={{ pl: 4 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{item.name}</Typography>
+                    <Typography variant="caption" color="text.secondary">ID: ITN-{(1000 + item.id).toString()}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={item.category} size="small" variant="outlined" sx={{ fontWeight: 600, borderRadius: 1.5 }} />
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{item.stock} {item.unit}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <WarehouseIcon sx={{ fontSize: '0.9rem', color: 'text.disabled' }} />
+                      <Typography variant="caption" sx={{ fontWeight: 600 }}>{item.location}</Typography>
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={item.status} 
+                      size="small" 
+                      color={item.status === 'In Stock' ? 'success' : item.status === 'Low Stock' ? 'warning' : 'error'}
+                      sx={{ fontWeight: 800, borderRadius: 1.5, fontSize: '0.65rem' }} 
+                    />
+                  </TableCell>
+                  <TableCell align="right" sx={{ pr: 4 }}>
+                    <IconButton size="small">
+                      <MoreIcon fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Card>
+    </Box>
   );
 }

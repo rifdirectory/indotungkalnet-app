@@ -87,8 +87,8 @@ export async function GET(req: Request) {
         const [eh, em] = sEnd.split(':').map(Number);
         const shiftEndMinutes = (eh * 60) + em;
         
-        // can_clock_out only if already clocked in AND current time is >= shift end
-        const canClockOut = !isOnLeave && hasIn && !hasOut && (currentMinutes >= shiftEndMinutes);
+        // can_clock_out only if already clocked in AND current time is >= (shift end - 10 minutes)
+        const canClockOut = !isOnLeave && hasIn && !hasOut && (currentMinutes >= (shiftEndMinutes - 10));
 
         return NextResponse.json({
             success: true,

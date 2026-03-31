@@ -29,11 +29,23 @@ export async function GET(request: Request) {
          JOIN shifts s ON es.shift_id = s.id 
          WHERE es.employee_id = e.id AND es.date = ? AND ? BETWEEN s.start_time AND s.end_time
         ) as explicit_on_shift,
+        -- Check if on approved leave today
+        (SELECT COUNT(*) FROM leave_requests l
+         WHERE l.employee_id = e.id AND l.status = 'approved' AND ? BETWEEN l.start_date AND l.end_date
+        ) as on_leave_today,
         -- Count active FIELD tasks (OTW or Working)
         (SELECT COUNT(*) FROM ticket_assignees ta 
          JOIN support_tickets t ON ta.ticket_id = t.id 
          WHERE ta.employee_id = e.id AND t.status IN ('OTW', 'Sedang Dikerjakan')
         ) as active_field_tasks,
+        -- Check if clocked in today
+        (SELECT COUNT(*) FROM attendance a 
+         WHERE a.employee_id = e.id AND a.type = 'clock_in' AND DATE(a.timestamp) = ?
+        ) as has_clocked_in,
+        -- Count total shifts for today (to determine if we should fallback to office hours)
+        (SELECT COUNT(*) FROM employee_shifts es 
+         WHERE es.employee_id = e.id AND es.date = ?
+        ) as total_shifts_today,
         -- Count total tasks in filter range
         (SELECT COUNT(*) FROM ticket_assignees ta 
          JOIN support_tickets t ON ta.ticket_id = t.id 
@@ -50,7 +62,7 @@ export async function GET(request: Request) {
       LEFT JOIN positions p ON e.position_id = p.id
       WHERE ${whereClause}
       ORDER BY e.full_name ASC
-    `, sqlParams);
+    `, [jakartaDate, jakartaTime, jakartaDate, jakartaDate, jakartaDate, ...sqlParams.slice(2)]);
     
     // Process status for frontend
     const result = (rows as any[]).map(emp => {
@@ -59,9 +71,16 @@ export async function GET(request: Request) {
       }
       let currentStatus = 'Off';
       const isNOC = emp.position_name?.toLowerCase().includes('noc');
-      const onShift = isNOC || emp.explicit_on_shift > 0 || (emp.use_presence === 1 && !isSunday && jakartaTime >= '08:00:00' && jakartaTime <= '16:00:00');
+      const hasExplicitShift = emp.total_shifts_today > 0;
       
-      if (!onShift) {
+      const onShift = isNOC || 
+                      emp.explicit_on_shift > 0 || 
+                      emp.has_clocked_in > 0 || 
+                      (!hasExplicitShift && emp.use_presence === 1 && !isSunday && jakartaTime >= '08:00:00' && jakartaTime <= '16:00:00');
+      
+      if (emp.on_leave_today > 0) {
+        currentStatus = 'Izin';
+      } else if (!onShift) {
         currentStatus = 'Off';
       } else if (emp.active_field_tasks > 0) {
         currentStatus = 'On-Site';

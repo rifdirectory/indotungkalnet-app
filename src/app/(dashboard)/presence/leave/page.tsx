@@ -14,22 +14,45 @@ import {
   TableRow, 
   Chip,
   IconButton,
-  useTheme
+  Tabs,
+  Tab,
+  alpha,
+  useTheme,
+  TextField,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
+  InputAdornment,
+  LinearProgress
 } from "@mui/material";
 import { 
   Check as CheckIcon, 
-  Close as CloseIcon 
+  Close as CloseIcon,
+  Search as SearchIcon
 } from "@mui/icons-material";
+import { formatToJakartaDate } from '@/lib/dateUtils';
 
 export default function LeaveManagementPage() {
   const theme = useTheme();
   const [leaves, setLeaves] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [mounted, setMounted] = useState(false);
+  const [search, setSearch] = useState('');
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [year, setYear] = useState(new Date().getFullYear());
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/presence/leave');
+      const params = new URLSearchParams();
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (month) params.append('month', month.toString());
+      if (year) params.append('year', year.toString());
+      if (search) params.append('search', search);
+
+      const res = await fetch(`/api/presence/leave?${params.toString()}`);
       const data = await res.json();
       if (data.success) {
         setLeaves(data.data);
@@ -41,8 +64,12 @@ export default function LeaveManagementPage() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    setMounted(true);
+    const timer = setTimeout(() => {
+      fetchData();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [statusFilter, month, year, search]);
 
   const handleUpdateLeave = async (id: number, status: string) => {
     const res = await fetch('/api/presence/leave', {
@@ -60,7 +87,59 @@ export default function LeaveManagementPage() {
         <Typography variant="body1" color="text.secondary">Tinjau dan setujui permohonan izin, sakit, atau cuti pegawai.</Typography>
       </Box>
 
+      {!mounted ? null : (
       <Card sx={{ borderRadius: 3, p: 2 }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
+          <TextField
+            size="small"
+            placeholder="Cari nama pegawai..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ flexGrow: 1 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon size={20} />
+                </InputAdornment>
+              ),
+            }}
+          />
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel>Bulan</InputLabel>
+            <Select value={month} label="Bulan" onChange={(e) => setMonth(Number(e.target.value))}>
+              {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map((m, i) => (
+                <MenuItem key={i} value={i + 1}>{m}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 100 }}>
+            <InputLabel>Tahun</InputLabel>
+            <Select value={year} label="Tahun" onChange={(e) => setYear(Number(e.target.value))}>
+              {[2024, 2025, 2026].map(y => (
+                <MenuItem key={y} value={y}>{y}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Stack>
+
+        <Tabs 
+          value={statusFilter} 
+          onChange={(_, val) => setStatusFilter(val)}
+          sx={{ 
+            mb: 2, 
+            borderBottom: 1, 
+            borderColor: 'divider',
+            '& .MuiTab-root': { fontWeight: 700, px: 3 }
+          }}
+        >
+          <Tab label="Pending" value="pending" />
+          <Tab label="Approved" value="approved" />
+          <Tab label="Rejected" value="rejected" />
+          <Tab label="Semua" value="all" />
+        </Tabs>
+        <Box sx={{ height: 4 }}>
+          {loading && <LinearProgress />}
+        </Box>
         <TableContainer>
           <Table>
             <TableHead>
@@ -83,7 +162,11 @@ export default function LeaveManagementPage() {
                   <TableCell>
                     <Chip label={l.type.toUpperCase()} size="small" color={l.type === 'sakit' ? 'warning' : 'primary'} variant="outlined" sx={{ fontWeight: 700 }} />
                   </TableCell>
-                  <TableCell>{l.start_date === l.end_date ? l.start_date : `${l.start_date} - ${l.end_date}`}</TableCell>
+                  <TableCell>
+                    {l.start_date === l.end_date 
+                      ? formatToJakartaDate(l.start_date) 
+                      : `${formatToJakartaDate(l.start_date)} - ${formatToJakartaDate(l.end_date)}`}
+                  </TableCell>
                   <TableCell sx={{ maxWidth: 200 }}>{l.reason}</TableCell>
                   <TableCell>
                     <Chip 
@@ -112,6 +195,7 @@ export default function LeaveManagementPage() {
           </Table>
         </TableContainer>
       </Card>
+      )}
     </Box>
   );
 }

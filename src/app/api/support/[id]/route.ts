@@ -74,6 +74,35 @@ export async function PUT(
             message: `Pegawai berikut sedang dalam status izin: ${names}` 
           }, { status: 400 });
         }
+
+        // 2.2 Validate availability (Shift check)
+        const [jakartaDate, jakartaTime] = getJakartaNow().split(' ');
+        const isSunday = new Date(jakartaDate).getDay() === 0;
+
+        const offShiftCheck: any = await db.query(`
+          SELECT e.full_name 
+          FROM employees e
+          LEFT JOIN positions p ON e.position_id = p.id
+          WHERE e.id IN (?)
+            AND NOT (
+              p.name LIKE '%NOC%'
+              OR (SELECT COUNT(*) FROM employee_shifts es 
+                  JOIN shifts s ON es.shift_id = s.id 
+                  WHERE es.employee_id = e.id AND es.date = ? AND ? BETWEEN s.start_time AND s.end_time) > 0
+              OR (SELECT COUNT(*) FROM attendance a 
+                  WHERE a.employee_id = e.id AND a.type = 'clock_in' AND DATE(a.timestamp) = ?) > 0
+              OR (p.use_presence = 1 AND ? != 0 AND ? BETWEEN '08:00:00' AND '16:00:00' 
+                  AND (SELECT COUNT(*) FROM employee_shifts es2 WHERE es2.employee_id = e.id AND es2.date = ?) = 0)
+            )
+        `, [newIds, jakartaDate, jakartaTime, jakartaDate, isSunday ? 0 : 1, jakartaTime, jakartaDate]);
+
+        if (offShiftCheck.length > 0) {
+          const names = offShiftCheck.map((e: any) => e.full_name).join(', ');
+          return NextResponse.json({ 
+            success: false, 
+            message: `Pegawai berikut belum masuk shift / Off: ${names}` 
+          }, { status: 400 });
+        }
       }
 
       // 3. Perform sync (DELETE then INSERT)
