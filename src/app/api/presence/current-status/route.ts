@@ -22,13 +22,26 @@ const getJakartaDate = () => {
     }).format(new Date());
 };
 
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function OPTIONS() {
+    return new NextResponse(null, {
+        status: 204,
+        headers: corsHeaders
+    });
+}
+
 export async function GET(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
         const employee_id = searchParams.get('employee_id');
 
         if (!employee_id) {
-            return NextResponse.json({ success: false, message: 'Employee ID required' }, { status: 400 });
+            return NextResponse.json({ success: false, message: 'Employee ID required' }, { status: 400, headers: corsHeaders });
         }
 
         const jakartaDate = getJakartaDate();
@@ -45,6 +58,8 @@ export async function GET(req: Request) {
         const shift = (shiftData as any[])?.[0];
         const sStart = shift?.start_time || '08:00:00';
         const sEnd = shift?.end_time || '17:00:00';
+        const bStart = shift?.break_start || '12:00:00';
+        const bEnd = shift?.break_end || '13:00:00';
 
         // 2. Get today's logs
         const allLogs: any = await query(`
@@ -55,6 +70,7 @@ export async function GET(req: Request) {
 
         const hasIn = allLogs.some((l: any) => l.type === 'clock_in');
         const hasOut = allLogs.some((l: any) => l.type === 'clock_out');
+        const hasBreakIn = allLogs.some((l: any) => l.type === 'break_in');
 
         // 3. Check for Approved Leave Today
         const leaveCheck: any = await query(`
@@ -76,6 +92,19 @@ export async function GET(req: Request) {
             const inRecord = allLogs.find((l: any) => l.type === 'clock_in');
             status = inRecord.status === 'late' ? 'Terlambat' : 'Hadir';
             duration = 'Sedang Bekerja';
+
+            // Check if currently in break time and hasn't clocked back in
+            const [bsh, bsm] = bStart.split(':').map(Number);
+            const [beh, bem] = bEnd.split(':').map(Number);
+            const bStartM = (bsh * 60) + bsm;
+            const bEndM = (beh * 60) + bem;
+
+            if (currentMinutes >= bStartM && currentMinutes < bEndM && !hasBreakIn) {
+                status = 'Sedang Istirahat';
+                duration = 'Otomatis';
+            } else if (hasBreakIn) {
+                duration = 'Kembali Bekerja';
+            }
         }
 
         if (hasOut) {
@@ -90,6 +119,19 @@ export async function GET(req: Request) {
         // can_clock_out only if already clocked in AND current time is >= (shift end - 10 minutes)
         const canClockOut = !isOnLeave && hasIn && !hasOut && (currentMinutes >= (shiftEndMinutes - 10));
 
+        // 6. Calculate is_off_schedule
+        const employeeData: any = await query(`
+            SELECT p.use_presence, p.name as position_name 
+            FROM employees e 
+            LEFT JOIN positions p ON e.position_id = p.id 
+            WHERE e.id = ?
+        `, [employee_id]);
+        const emp = employeeData[0] || {};
+        const isNOC = emp.position_name?.toLowerCase().includes('noc');
+        const isSunday = now.getDay() === 0;
+        const hasExplicitShift = !!shift;
+        const isOffSchedule = !isNOC && !hasExplicitShift && (isSunday || emp.use_presence === 0);
+
         return NextResponse.json({
             success: true,
             data: {
@@ -99,16 +141,20 @@ export async function GET(req: Request) {
                 shift_hours: `${sStart.substring(0, 5)} - ${sEnd.substring(0, 5)}`,
                 shift_start: sStart.substring(0, 5),
                 shift_end: sEnd.substring(0, 5),
+                break_start: bStart.substring(0, 5),
+                break_end: bEnd.substring(0, 5),
                 has_clocked_in: !!hasIn,
                 has_clocked_out: !!hasOut,
+                has_break_in: !!hasBreakIn,
                 can_clock_out: !!canClockOut,
                 is_on_leave: isOnLeave,
-                leave_type: leaveType
+                leave_type: leaveType,
+                is_off_schedule: isOffSchedule
             }
-        });
+        }, { status: 200, headers: corsHeaders });
 
     } catch (error: any) {
         console.error('[Presence] Status API Error:', error);
-        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
+        return NextResponse.json({ success: false, message: error.message }, { status: 500, headers: corsHeaders });
     }
 }

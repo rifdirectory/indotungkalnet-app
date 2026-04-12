@@ -4,6 +4,7 @@ import {
   DrawerContentScrollView, 
 } from '@react-navigation/drawer';
 import { useRouter, usePathname } from 'expo-router';
+import { DrawerActions } from '@react-navigation/native';
 import { 
   Home, 
   Calendar, 
@@ -14,9 +15,10 @@ import {
   Clock,
   ChevronRight,
   FileText,
-  History
+  History,
+  LifeBuoy
 } from 'lucide-react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../utils/storage';
 
 export default function CustomDrawerContent(props: any) {
   const router = useRouter();
@@ -37,7 +39,7 @@ export default function CustomDrawerContent(props: any) {
     loadUser();
   }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     Alert.alert(
       "Keluar Akun",
       "Apakah Anda yakin ingin keluar dari aplikasi ITNET?",
@@ -47,11 +49,21 @@ export default function CustomDrawerContent(props: any) {
           text: "Keluar", 
           style: "destructive",
           onPress: async () => {
-            await SecureStore.deleteItemAsync('user_name');
-            await SecureStore.deleteItemAsync('user_position');
-            await SecureStore.deleteItemAsync('user_id');
-            await SecureStore.deleteItemAsync('user_is_pic');
-            router.replace('/');
+            try {
+              await Promise.all([
+                SecureStore.deleteItemAsync('user_name'),
+                SecureStore.deleteItemAsync('user_position'),
+                SecureStore.deleteItemAsync('user_id'),
+                SecureStore.deleteItemAsync('user_is_pic'),
+                SecureStore.deleteItemAsync('user_role'),
+                SecureStore.deleteItemAsync('user_token'),
+                SecureStore.deleteItemAsync('read_notifications')
+              ]);
+              router.replace('/');
+            } catch (e) {
+              // Fallback replace
+              router.replace('/');
+            }
           }
         }
       ]
@@ -60,6 +72,7 @@ export default function CustomDrawerContent(props: any) {
 
   const menuItems = [
     { label: 'Dashboard', icon: Home, path: '/home' },
+    { label: 'Tiket Support', icon: LifeBuoy, path: '/tickets' },
     { label: 'Tugas Saya', icon: ClipboardCheck, path: '/tasks' },
   ];
 
@@ -72,6 +85,7 @@ export default function CustomDrawerContent(props: any) {
   const managerialItems = [
     { label: 'Persetujuan Izin', icon: ShieldCheck, path: '/approval-leave', hidden: !isPic },
     { label: 'Penugasan Lembur', icon: Clock, path: '/overtime', hidden: !isPic },
+    { label: 'Penilaian Harian', icon: FileText, path: '/performance', hidden: !isPic },
   ];
 
   return (
@@ -100,6 +114,13 @@ export default function CustomDrawerContent(props: any) {
                     )}
                 </View>
             </View>
+            
+            <TouchableOpacity 
+                onPress={handleLogout}
+                className="w-10 h-10 bg-red-50 rounded-xl items-center justify-center border border-red-100 active:bg-red-100"
+            >
+                <LogOut size={20} color="#ef4444" />
+            </TouchableOpacity>
         </View>
       </View>
 
@@ -108,7 +129,14 @@ export default function CustomDrawerContent(props: any) {
           <Text className="text-slate-300 text-[9px] font-black uppercase tracking-[2px] mb-4 ml-2">NAVIGASI UTAMA</Text>
           
           {menuItems.map((item, index) => {
-            const isActive = pathname === item.path;
+            const isActive = pathname.includes(item.path);
+            
+            // Skip "Tiket Support" for unauthorized mobile users
+            if (item.label === 'Tiket Support') {
+              const allowedNames = ['Arifin Ahmad', 'Ria Puspitasari', 'Nurani Mila Utami', 'Wisnu Rachmawan'];
+              if (!allowedNames.includes(userName)) return null;
+            }
+
             return (
                 <TouchableOpacity
                     key={index}
@@ -129,7 +157,7 @@ export default function CustomDrawerContent(props: any) {
           <Text className="text-slate-300 text-[9px] font-black uppercase tracking-[2px] mb-4 ml-2">PEGAWAI</Text>
           
           {employeeItems.map((item, index) => {
-            const isActive = pathname === item.path;
+            const isActive = pathname.includes(item.path);
             return (
                 <TouchableOpacity
                     key={index}
@@ -151,7 +179,7 @@ export default function CustomDrawerContent(props: any) {
               <Text className="text-slate-300 text-[9px] font-black uppercase tracking-[2px] mb-4 ml-2">MANAJERIAL</Text>
               
               {managerialItems.filter(i => !i.hidden).map((item, index) => {
-                const isActive = pathname === item.path;
+                const isActive = pathname.includes(item.path);
                 return (
                     <TouchableOpacity
                         key={index}
@@ -171,21 +199,6 @@ export default function CustomDrawerContent(props: any) {
         </View>
       </DrawerContentScrollView>
 
-      {/* Simplified Footer / Logout */}
-      <View className="px-8 pt-6 pb-12 border-t border-slate-50">
-        <TouchableOpacity 
-          onPress={handleLogout}
-          className="flex-row items-center active:opacity-60"
-        >
-          <LogOut size={18} color="#94a3b8" />
-          <Text className="ml-4 text-slate-500 font-bold text-sm">Keluar Akun</Text>
-        </TouchableOpacity>
-        
-        <View className="mt-8 flex-row items-center justify-between opacity-30">
-            <Text className="text-[9px] font-black text-slate-400">ITNET MOBILE</Text>
-            <Text className="text-[9px] font-black text-slate-400">V1.0.0</Text>
-        </View>
-      </View>
     </View>
   );
 }

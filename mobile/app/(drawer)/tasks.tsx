@@ -11,8 +11,10 @@ import {
   StatusBar,
   TextInput
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
+import { DrawerActions } from '@react-navigation/native';
+import { DrawerNavigationProp } from '@react-navigation/drawer';
+import * as SecureStore from '../../utils/storage';
 import { 
   ArrowLeft, 
   ClipboardCheck, 
@@ -25,7 +27,8 @@ import {
   Calendar,
   Filter,
   Search,
-  ChevronDown
+  ChevronDown,
+  Menu
 } from 'lucide-react-native';
 import axios from 'axios';
 
@@ -33,6 +36,7 @@ import { API_URL } from '../../services/api';
 
 export default function MyTasksScreen() {
   const router = useRouter();
+  const navigation = useNavigation<DrawerNavigationProp<any>>();
   const [userId, setUserId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +72,28 @@ export default function MyTasksScreen() {
         const res = await axios.get(url);
         if (res.data.success) {
             setTasks(res.data.data);
+            
+            // Mark all fetched active tasks as read
+            if (currentTab === 'active' && res.data.data.length > 0) {
+                try {
+                    const storedStr = await SecureStore.getItemAsync('read_notifications');
+                    let readList: string[] = [];
+                    if (storedStr) readList = JSON.parse(storedStr);
+                    
+                    let updated = false;
+                    res.data.data.forEach((t: any) => {
+                        const key = `${t.type}-${t.id}`;
+                        if (!readList.includes(key)) {
+                            readList.push(key);
+                            updated = true;
+                        }
+                    });
+                    
+                    if (updated) {
+                        await SecureStore.setItemAsync('read_notifications', JSON.stringify(readList));
+                    }
+                } catch(e){}
+            }
         }
     } catch (error) {
         console.error('Fetch Tasks Error:', error);
@@ -156,8 +182,8 @@ export default function MyTasksScreen() {
         style={{ paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 10 }}
         className="px-6 pb-2 bg-white flex-row items-center justify-between z-10"
       >
-        <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-            <ArrowLeft size={24} color="#334155" />
+        <TouchableOpacity onPress={() => navigation.dispatch(DrawerActions.openDrawer())} className="p-2 -ml-2">
+            <Menu size={24} color="#334155" />
         </TouchableOpacity>
         <View className="flex-row bg-slate-100 p-1 rounded-2xl flex-1 mx-4">
             <TouchableOpacity 
@@ -304,6 +330,7 @@ export default function MyTasksScreen() {
                 </Text>
             </View>
         )}
+        <View className="pb-32" />
       </ScrollView>
     </SafeAreaView>
   );

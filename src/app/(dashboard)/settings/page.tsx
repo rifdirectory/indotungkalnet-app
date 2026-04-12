@@ -3,22 +3,29 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Typography, Stack, Button, Card, Grid, TextField, 
-  InputAdornment, Divider, Alert, Snackbar, CircularProgress, alpha
+  InputAdornment, Divider, Alert, Snackbar, CircularProgress, alpha,
+  ToggleButton, ToggleButtonGroup
 } from "@mui/material";
 import { 
   Settings as SettingsIcon, 
   LocationOn as LocationIcon, 
   Save as SaveIcon,
   Map as MapIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  NotificationsActive as NotifIcon
 } from "@mui/icons-material";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({
     office_latitude: '',
     office_longitude: '',
-    office_radius: '100'
+    office_radius: '100',
+    wa_gateway_url: 'https://api.fonnte.com/send',
+    wa_api_token: '',
+    wa_notification_enabled: '0',
+    wa_gateway_mode: 'cloud'
   });
+  const [waStatus, setWaStatus] = useState<{ status: string, qr: string }>({ status: 'OFFLINE', qr: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: 'success', text: '', open: false });
@@ -32,7 +39,11 @@ export default function SettingsPage() {
         setSettings({
           office_latitude: data.data.office_latitude || '',
           office_longitude: data.data.office_longitude || '',
-          office_radius: data.data.office_radius || '100'
+          office_radius: data.data.office_radius || '100',
+          wa_gateway_url: data.data.wa_gateway_url || 'https://api.fonnte.com/send',
+          wa_api_token: data.data.wa_api_token || '',
+          wa_notification_enabled: data.data.wa_notification_enabled || '0',
+          wa_gateway_mode: data.data.wa_gateway_mode || 'cloud'
         });
       }
     } catch (error) {
@@ -45,6 +56,24 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
   }, []);
+
+  useEffect(() => {
+    let interval: any;
+    if (settings.wa_gateway_mode === 'local') {
+      const checkStatus = async () => {
+        try {
+          const res = await fetch('http://localhost:8080/status');
+          const data = await res.json();
+          setWaStatus(data);
+        } catch (err) {
+          setWaStatus({ status: 'OFFLINE', qr: '' });
+        }
+      };
+      checkStatus();
+      interval = setInterval(checkStatus, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [settings.wa_gateway_mode]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -176,21 +205,178 @@ export default function SettingsPage() {
           </Card>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 5 }}>
-          <Card sx={{ p: 4, borderRadius: 4, bgcolor: alpha('#0a84ff', 0.03), border: '1px dashed', borderColor: alpha('#0a84ff', 0.2) }}>
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Penyimpanan Foto</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Sistem saat ini dikonfigurasi untuk menyimpan foto absensi di **Server Lokal**. 
-            </Typography>
-            <Alert icon={false} severity="info" sx={{ borderRadius: 2 }}>
-              <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 700 }}>INFORMASI:</Typography>
-              <Typography variant="caption">
-                Foto akan disimpan di direktori: <br/>
-                <code>/public/uploads/presence</code> <br/>
-                Pastikan server memiliki ruang penyimpanan yang cukup.
+        <Grid size={{ xs: 12, md: 7 }}>
+          <Card sx={{ p: 4, borderRadius: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <NotifIcon color="primary" /> Konfigurasi WhatsApp
               </Typography>
-            </Alert>
+              <ToggleButtonGroup
+                color="primary"
+                value={settings.wa_gateway_mode}
+                exclusive
+                onChange={(_, val) => val && setSettings({ 
+                  ...settings, 
+                  wa_gateway_mode: val,
+                  wa_gateway_url: val === 'local' ? 'http://localhost:8080/send' : settings.wa_gateway_url
+                })}
+                size="small"
+                sx={{ borderRadius: 2 }}
+              >
+                <ToggleButton value="cloud" sx={{ px: 2, fontWeight: 700 }}>CLOUD (FONNTE)</ToggleButton>
+                <ToggleButton value="local" sx={{ px: 2, fontWeight: 700 }}>LOCAL GATEWAY</ToggleButton>
+              </ToggleButtonGroup>
+            </Stack>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+              {settings.wa_gateway_mode === 'cloud' 
+                ? 'Gunakan layanan pihak ketiga (Fonnte) untuk mengirim pesan. Membutuhkan paket berlangganan.' 
+                : 'Gunakan engine WhatsApp lokal yang berjalan di server Bapak. Gratis dan lebih privat.'}
+            </Typography>
+
+            <Stack spacing={3}>
+              {settings.wa_gateway_mode === 'local' && (
+                <Box sx={{ 
+                  p: 3, 
+                  borderRadius: 4, 
+                  bgcolor: alpha('#f8fafc', 0.5), 
+                  border: '1px solid', 
+                  borderColor: 'divider',
+                  textAlign: 'center'
+                }}>
+                  <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 700 }}>
+                    Status Gateway Lokal: 
+                    <Box component="span" sx={{ ml: 1, color: waStatus.status === 'READY' ? 'success.main' : 'warning.main' }}>
+                      {waStatus.status}
+                    </Box>
+                  </Typography>
+
+                  {waStatus.status === 'OFFLINE' && (
+                    <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
+                      Gateway Lokal tidak terdeteksi. Silahkan jalankan <code>npm run wa-gateway</code> di server.
+                    </Alert>
+                  )}
+
+                  {waStatus.status === 'QR_REQUIRED' && waStatus.qr && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                        Silahkan scan QR Code ini dengan WhatsApp Bapak:
+                      </Typography>
+                      <Box 
+                        component="img" 
+                        src={waStatus.qr} 
+                        sx={{ 
+                          width: 240, 
+                          height: 240, 
+                          mx: 'auto', 
+                          display: 'block', 
+                          borderRadius: 2,
+                          border: '4px solid #fff',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                        }} 
+                      />
+                    </Box>
+                  )}
+
+                  {waStatus.status === 'READY' && (
+                    <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
+                      WhatsApp Terhubung! Sistem siap mengirim notifikasi.
+                    </Alert>
+                  )}
+                </Box>
+              )}
+
+              <TextField
+                fullWidth
+                label="WhatsApp Gateway URL"
+                value={settings.wa_gateway_url}
+                onChange={(e) => setSettings({ ...settings, wa_gateway_url: e.target.value })}
+                placeholder={settings.wa_gateway_mode === 'local' ? 'http://localhost:8080/send' : 'https://api.fonnte.com/send'}
+                helperText="URL API Endpoint pengiriman pesan"
+              />
+
+              {settings.wa_gateway_mode === 'cloud' && (
+                <TextField
+                  fullWidth
+                  label="WhatsApp API Token"
+                  type="password"
+                  value={settings.wa_api_token}
+                  onChange={(e) => setSettings({ ...settings, wa_api_token: e.target.value })}
+                  placeholder="Masukkan Token API WA"
+                  helperText="Token otorisasi dari penyedia gateway (Fonnte/Woowa)"
+                />
+              )}
+
+              <Box sx={{ 
+                p: 2, 
+                borderRadius: 3, 
+                bgcolor: settings.wa_notification_enabled === '1' ? alpha('#16a34a', 0.05) : alpha('#f43f5e', 0.05),
+                border: '1px solid',
+                borderColor: settings.wa_notification_enabled === '1' ? alpha('#16a34a', 0.1) : alpha('#f43f5e', 0.1),
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: settings.wa_notification_enabled === '1' ? '#16a34a' : '#f43f5e' }}>
+                    Status Notifikasi WA: {settings.wa_notification_enabled === '1' ? 'AKTIF' : 'NON-AKTIF'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Jika aktif, sistem akan mengirimkan WA otomatis untuk tiket & permohonan.
+                  </Typography>
+                </Box>
+                <Button 
+                  size="small"
+                  variant="outlined" 
+                  color={settings.wa_notification_enabled === '1' ? 'error' : 'success'}
+                  onClick={() => setSettings({ ...settings, wa_notification_enabled: settings.wa_notification_enabled === '1' ? '0' : '1' })}
+                  sx={{ borderRadius: 2 }}
+                >
+                  {settings.wa_notification_enabled === '1' ? 'Matikan' : 'Aktifkan'}
+                </Button>
+              </Box>
+
+              <Box sx={{ pt: 1 }}>
+                <Button 
+                  variant="contained" 
+                  startIcon={<SaveIcon />}
+                  onClick={handleSave}
+                  disabled={saving}
+                  sx={{ borderRadius: 2, px: 4, py: 1.2, fontWeight: 700 }}
+                >
+                  {saving ? 'Menyimpan...' : 'Simpan Pengaturan WA'}
+                </Button>
+              </Box>
+            </Stack>
           </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 5 }}>
+          <Stack spacing={4}>
+            <Card sx={{ p: 4, borderRadius: 4, bgcolor: alpha('#0a84ff', 0.03), border: '1px dashed', borderColor: alpha('#0a84ff', 0.2) }}>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Penyimpanan Foto</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Sistem saat ini dikonfigurasi untuk menyimpan foto absensi di **Server Lokal**. 
+              </Typography>
+              <Alert icon={false} severity="info" sx={{ borderRadius: 2 }}>
+                <Typography variant="caption" sx={{ display: 'block', mb: 1, fontWeight: 700 }}>INFORMASI:</Typography>
+                <Typography variant="caption">
+                  Foto akan disimpan di direktori: <br/>
+                  <code>/public/uploads/presence</code> <br/>
+                </Typography>
+              </Alert>
+            </Card>
+
+            <Card sx={{ p: 4, borderRadius: 4, bgcolor: alpha('#f97316', 0.03), border: '1px dashed', borderColor: alpha('#f97316', 0.2) }}>
+               <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Catatan WA</Typography>
+               <Typography variant="caption" color="text.secondary">
+                  Gunakan variabel berikut pesan otomatis: <br/>
+                  - <code>[customer]</code> Nama Pelanggan <br/>
+                  - <code>[ticket]</code> Nomor Tiket <br/>
+                  - <code>[status]</code> Status Penugasan
+               </Typography>
+            </Card>
+          </Stack>
         </Grid>
       </Grid>
 

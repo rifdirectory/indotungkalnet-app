@@ -78,6 +78,15 @@ const menuItems: MenuItem[] = [
       { label: "Data Pegawai", href: "/employees" },
     ]
   },
+  { 
+    icon: <AnalyticsIcon />, 
+    label: "Laporan", 
+    href: "#",
+    subItems: [
+      { label: "KPI Pegawai", href: "/performance" },
+      { label: "Laporan Absensi", href: "/reports/attendance" },
+    ]
+  },
   { icon: <MaintenanceIcon />, label: "Maintenance", href: "/maintenance" },
   { icon: <TicketIcon />, label: "Tiketing", href: "/support" },
   // { icon: <ScheduleIcon />, label: "Penugasan", href: "/tasks" },
@@ -93,6 +102,7 @@ const menuItems: MenuItem[] = [
       { label: "Data Presensi", href: "/presence/history" },
     ]
   },
+  { icon: <BadgeIcon />, label: "Kirim Notifikasi", href: "/notifications" },
   { icon: <AnalyticsIcon />, label: "ERP/Analytics", href: "/analytics" },
 ];
 
@@ -114,11 +124,11 @@ function SidebarContent() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      // Use window.location.href to fully clear state and trigger middleware
-      window.location.href = '/login';
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error('Logout API failed:', error);
     }
+    // Always redirect, even if API fails
+    window.location.href = '/login';
   };
 
   const [mounted, setMounted] = React.useState(false);

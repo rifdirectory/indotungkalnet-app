@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getJakartaNow } from '@/lib/dateUtils';
-import { sendExpoPushNotification, notifySupportStatusChange } from '@/lib/notifications';
+import { sendWhatsApp } from '@/lib/whatsapp';
 
 export async function PUT(
   req: Request,
@@ -40,11 +40,8 @@ export async function PUT(
 
     await db.query(query, queryParams);
 
-    // Trigger Multi-role notification for status change
     const finalNewStatus = status === 'in_progress' || status === 'Sedang Dikerjakan' ? 'Sedang Dikerjakan' : (status === 'completed' || status === 'Resolved' ? 'Sudah Diperbaiki' : status);
-    if (finalNewStatus !== oldStatus) {
-      await notifySupportStatusChange(id, finalNewStatus, customerName, 'ticket');
-    }
+    // (notifySupportStatusChange removed)
 
     // Sync multi-assignees and identify NEW ones for notification
     if (Array.isArray(assigned_to)) {
@@ -116,27 +113,23 @@ export async function PUT(
       // 4. Trigger Notifications for NEW assignees
       if (newIds.length > 0) {
         try {
-          // Fetch names and tokens for new assignees
-          const employeesToNotify: any = await db.query(
-            'SELECT id, full_name, push_token FROM employees WHERE id IN (?) AND push_token IS NOT NULL',
-            [newIds]
-          );
-
-          if (employeesToNotify.length > 0) {
-            const tokens = employeesToNotify.map((e: any) => e.push_token);
-            const ticketSummary: any = await db.query('SELECT customer_name FROM support_tickets WHERE id = ?', [id]);
-            const customerName = ticketSummary[0]?.customer_name || 'Pelanggan';
-
-            await sendExpoPushNotification(
-              tokens,
-              'Penugasan Tiket Baru 🛠️',
-              `Halo! Anda ditugaskan untuk menangani tiket #${id} (${customerName}). Silakan periksa detailnya di aplikasi mobile.`,
-              { ticketId: id, customerName }
-            );
+          const empRows: any = await db.query('SELECT full_name, phone FROM employees WHERE id IN (?)', [newIds]);
+          for (const emp of empRows) {
+            if (emp.phone) {
+              const waMsg = `*PENUGASAN TIKET* (Update) 🛠️\n\n` +
+                          `Halo *${emp.full_name}*,\n` +
+                          `Anda telah ditugaskan untuk tiket:\n\n` +
+                          `ID Tiket: #${id}\n` +
+                          `Pelanggan: ${customerName}\n` +
+                          `Kategori: ${category}\n` +
+                          `Keluhan: ${description || '-'}\n` +
+                          `Status: ${status}\n\n` +
+                          `Silahkan cek aplikasi mobile ITNET.`;
+              await sendWhatsApp(emp.phone, waMsg);
+            }
           }
-        } catch (error) {
-          console.error('Notification Trigger Error:', error);
-          // Don't fail the whole request if notification fails
+        } catch (waErr) {
+          console.error('[Support Update API] Failed to send WA notification:', waErr);
         }
       }
     }

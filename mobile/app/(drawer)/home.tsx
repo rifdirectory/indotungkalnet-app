@@ -1,5 +1,5 @@
 // Reload Trigger: 2026-03-30 03:56
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -10,7 +10,9 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
-  Platform
+  Platform,
+  Modal,
+  FlatList
 } from 'react-native';
 import { useRouter, useNavigation, useFocusEffect } from 'expo-router';
 import { 
@@ -23,10 +25,13 @@ import {
   CheckCircle2, 
   AlertCircle,
   ClipboardCheck,
-  Menu
+  Menu,
+  Bell,
+  X,
+  ChevronRight
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../../utils/storage';
 import { API_URL } from '../../services/api';
 import axios from 'axios';
 import { DrawerActions } from '@react-navigation/native';
@@ -57,10 +62,19 @@ export default function HomeScreen() {
   const [hasClockedOut, setHasClockedOut] = useState(false);
   const [canClockOut, setCanClockOut] = useState(false);
   const [shiftEnd, setShiftEnd] = useState('16:00');
+  const [breakStart, setBreakStart] = useState('12:00');
+  const [hasBreakIn, setHasBreakIn] = useState(false);
   const [isOnLeave, setIsOnLeave] = useState(false);
   const [leaveType, setLeaveType] = useState<string | null>(null);
+  const [isOffSchedule, setIsOffSchedule] = useState(false);
   
-  const calculateDistance = (currentCoords: any, targetCoords: any) => {
+  const isFetchingInit = useRef(false);
+  
+  // Notification states
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  
+  const calculateDistance = useCallback((currentCoords: any, targetCoords: any) => {
     if (!currentCoords || !targetCoords) return;
     const R = 6371e3; // metres
     const φ1 = currentCoords.latitude * Math.PI/180;
@@ -76,9 +90,9 @@ export default function HomeScreen() {
     const d = R * c; // in metres
     setDistance(Math.round(d));
     setIsWithinRadius(d <= targetCoords.radius);
-  };
+  }, []);
 
-  const syncLocation = async (targetCoords: any) => {
+  const syncLocation = useCallback(async (targetCoords: any) => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -95,10 +109,16 @@ export default function HomeScreen() {
         if (targetCoords) calculateDistance(lastLoc.coords, targetCoords);
       }
 
-      // 2. Background: Get accurate position with 10s timeout
-      const currentLoc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      // 2. Background: Get accurate position with 5s timeout
+      const currentLoc = await Promise.race([
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Location timeout')), 5000))
+      ]).catch(e => {
+        console.log('Location timeout or error:', e.message);
+        return null;
+      }) as any;
       
       if (currentLoc) {
         setUserLocation(currentLoc.coords);
@@ -107,9 +127,31 @@ export default function HomeScreen() {
     } catch (err) {
       console.error('Location sync error:', err);
     }
-  };
+  }, [calculateDistance]);
 
-  const init = async () => {
+  const pollNotifications = useCallback(async (uId?: string) => {
+    try {
+        const activeId = uId || userId;
+        if (!activeId) return;
+        
+        const [notifRes, storedStr] = await Promise.all([
+            axios.get(`${API_URL}/tasks?employee_id=${activeId}&mode=active`).catch(() => null),
+            SecureStore.getItemAsync('read_notifications')
+        ]);
+
+        if (notifRes?.data?.success) {
+            let readList: string[] = [];
+            try { if(storedStr) readList = JSON.parse(storedStr); } catch(e){}
+            const fetchedTasks = notifRes.data.data || [];
+            const unreadTasks = fetchedTasks.filter((t: any) => !readList.includes(`${t.type}-${t.id}`));
+            setNotifications(unreadTasks);
+        }
+    } catch(e){}
+  }, [userId]);
+
+  const init = useCallback(async () => {
+    if (isFetchingInit.current) return;
+    isFetchingInit.current = true;
     setLoading(true);
     try {
       // 1. Fundamental user data
@@ -121,13 +163,24 @@ export default function HomeScreen() {
       
       if (name) setUserName(name);
       if (pos) setUserPosition(pos);
-      if (id) setUserId(id);
+      if (id) {
+        setUserId(id);
+      } else {
+        // Session lost or logged out
+        setLoading(false);
+        router.replace('/');
+        return;
+      }
 
       // 2. Critical API Data (Settings & Status)
       const [settingsRes, statusRes] = await Promise.all([
         axios.get(`${API_URL}/settings`).catch(() => null),
         id ? axios.get(`${API_URL}/presence/current-status?employee_id=${id}`).catch(() => null) : null
       ]);
+
+      if (id) {
+        pollNotifications(id);
+      }
 
       // Parse Settings
       let targetCoords = null;
@@ -148,14 +201,17 @@ export default function HomeScreen() {
         const d = statusRes.data.data;
         setHasClockedIn(d.has_clocked_in);
         setHasClockedOut(d.has_clocked_out);
+        setHasBreakIn(d.has_break_in);
         setCanClockOut(d.can_clock_out);
         setShiftEnd(d.shift_end?.substring(0, 5) || '17:00');
+        setBreakStart(d.break_start?.substring(0, 5) || '12:00');
         setUserStatus(d.status);
         setUserStatusColor(d.color || '#6b7280');
         setUserShift(d.shift_name);
         setUserShiftHours(d.shift_hours);
         setIsOnLeave(d.is_on_leave);
         setLeaveType(d.leave_type);
+        setIsOffSchedule(d.is_off_schedule);
       }
 
       // 3. Kick off Location in background (Don't await fully to speed up UI)
@@ -165,8 +221,9 @@ export default function HomeScreen() {
       console.error('Init Error:', error);
     } finally {
       setLoading(false);
+      isFetchingInit.current = false;
     }
-  };
+  }, [pollNotifications, syncLocation, router]);
 
   // Update clock every minute
   useEffect(() => {
@@ -175,9 +232,13 @@ export default function HomeScreen() {
   }, []);
 
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       init();
-    }, [])
+      const interval = setInterval(() => {
+          pollNotifications();
+      }, 15000);
+      return () => clearInterval(interval);
+    }, [init, pollNotifications])
   );
 
   const onRefresh = async () => {
@@ -186,7 +247,7 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const handleAttendance = (type: 'clock_in' | 'clock_out') => {
+  const handleAttendance = (type: 'clock_in' | 'clock_out' | 'break_in') => {
     if (!locationEnabled) {
         Alert.alert('Lokasi Mati', 'Sistem tidak bisa mendeteksi lokasi Anda. Silakan aktifkan GPS dan tarik layar untuk menyegarkan.');
         return;
@@ -199,6 +260,11 @@ export default function HomeScreen() {
 
     if (type === 'clock_in' && hasClockedIn) {
         Alert.alert('Status: Sudah Absen', 'Sistem mendeteksi Anda sudah melakukan absen masuk hari ini.');
+        return;
+    }
+
+    if (type === 'clock_in' && isOffSchedule) {
+        Alert.alert('Status: Libur / Off', 'Sistem mendeteksi jadwal Anda hari ini Libur. Anda tidak diwajibkan / diizinkan absen masuk.');
         return;
     }
 
@@ -256,10 +322,92 @@ export default function HomeScreen() {
             <Menu size={24} color="#334155" />
         </TouchableOpacity>
         <Text className="text-slate-800 text-lg font-extrabold tracking-tight text-center flex-1">{userName}</Text>
-        <TouchableOpacity className="p-2">
-            <User size={24} color="#64748b" />
+        <TouchableOpacity 
+            className="p-2 relative"
+            onPress={() => setShowNotifications(true)}
+        >
+            <Bell size={24} color="#64748b" />
+            {notifications.length > 0 && (
+                <View className="absolute top-1 right-1 bg-red-500 rounded-full w-4 h-4 items-center justify-center border border-white">
+                    <Text className="text-white text-[9px] font-bold">{notifications.length}</Text>
+                </View>
+            )}
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={showNotifications}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowNotifications(false)}
+      >
+        <View className="flex-1 bg-black/50 justify-end">
+            <View className="bg-white rounded-t-3xl h-[80%] overflow-hidden">
+                <View className="flex-row justify-between items-center p-5 border-b border-gray-100 bg-white">
+                    <View>
+                        <Text className="text-xl font-bold text-gray-800">Notifikasi</Text>
+                        <Text className="text-sm text-gray-500 mt-1">Tugas & Tiket Aktif</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setShowNotifications(false)} className="bg-gray-100 p-2 rounded-full">
+                        <X size={20} color="#64748b" />
+                    </TouchableOpacity>
+                </View>
+                
+                <FlatList
+                    data={notifications}
+                    keyExtractor={(item) => `${item.type}-${item.id}`}
+                    contentContainerStyle={{ padding: 20 }}
+                    ListEmptyComponent={
+                        <View className="items-center justify-center py-10">
+                            <CheckCircle2 size={48} color="#10b981" className="mb-4 opacity-50" />
+                            <Text className="text-gray-500 text-lg font-medium text-center">Bagus Sekali!</Text>
+                            <Text className="text-gray-400 text-sm text-center mt-1">Tidak ada tugas yang membutuhkan tanggapan Anda.</Text>
+                        </View>
+                    }
+                    renderItem={({ item }) => (
+                        <TouchableOpacity 
+                            className="bg-white border border-gray-100 shadow-sm rounded-2xl mb-4 overflow-hidden"
+                            onPress={async () => {
+                                setShowNotifications(false);
+                                try {
+                                  const storedStr = await SecureStore.getItemAsync('read_notifications');
+                                  let readList: string[] = [];
+                                  if (storedStr) readList = JSON.parse(storedStr);
+                                  const key = `${item.type}-${item.id}`;
+                                  if (!readList.includes(key)) {
+                                      readList.push(key);
+                                      await SecureStore.setItemAsync('read_notifications', JSON.stringify(readList));
+                                  }
+                                } catch(e){}
+                                router.push('/tasks');
+                            }}
+                        >
+                            <View className="flex-row items-center border-b border-gray-50 bg-slate-50/50 p-3">
+                                <View className={`px-2 py-1 rounded-md ${item.type === 'ticket' ? 'bg-orange-100' : 'bg-blue-100'}`}>
+                                    <Text className={`text-[10px] font-bold uppercase tracking-wider ${item.type === 'ticket' ? 'text-orange-700' : 'text-blue-700'}`}>
+                                        {item.type === 'ticket' ? 'Tiket Support' : 'Tugas Manual'}
+                                    </Text>
+                                </View>
+                                <Text className="ml-2 text-xs font-medium text-gray-500/80">
+                                    {new Date(item.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                                </Text>
+                            </View>
+                            <View className="p-4 flex-row justify-between items-center">
+                                <View className="flex-1 mr-3">
+                                    <Text className="font-bold text-gray-800 text-base" numberOfLines={1}>{item.title}</Text>
+                                    <View className="flex-row items-center mt-2">
+                                        <View className="w-2 h-2 rounded-full bg-amber-500 mr-2" />
+                                        <Text className="text-xs text-gray-500 font-medium">{item.status}</Text>
+                                    </View>
+                                </View>
+                                <ChevronRight size={20} color="#cbd5e1" />
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                />
+            </View>
+        </View>
+      </Modal>
 
       <ScrollView 
         className="flex-1"
@@ -290,16 +438,37 @@ export default function HomeScreen() {
 
         {/* Buttons - Solid and Clear */}
         <View className="px-6 flex-row space-x-4 mb-8">
-            <TouchableOpacity 
-                onPress={() => handleAttendance('clock_in')}
-                disabled={hasClockedIn || isOnLeave}
-                className={`flex-1 h-32 rounded-3xl items-center justify-center ${locationEnabled && !hasClockedIn && !isOnLeave ? 'bg-blue-600' : 'bg-slate-100'}`}
-            >
-                <Camera size={32} color={locationEnabled && !hasClockedIn && !isOnLeave ? 'white' : '#cbd5e1'} />
-                <Text className={`font-bold mt-2 ${locationEnabled && !hasClockedIn && !isOnLeave ? 'text-white' : 'text-slate-400'}`}>
-                    {isOnLeave ? 'SEDANG IZIN' : (hasClockedIn ? 'SUDAH ABSEN' : 'ABSEN MASUK')}
-                </Text>
-            </TouchableOpacity>
+            {/* Action 1: Clock In OR Break In */}
+            {(() => {
+                const nowStr = currentTime.getHours().toString().padStart(2, '0') + ':' + currentTime.getMinutes().toString().padStart(2, '0');
+                const isAfterBreakStart = nowStr >= breakStart;
+                
+                let actionType: 'clock_in' | 'break_in' = 'clock_in';
+                let actionLabel = 'ABSEN MASUK';
+                let isDone = hasClockedIn;
+                
+                if (hasClockedIn && !hasBreakIn && isAfterBreakStart) {
+                    actionType = 'break_in';
+                    actionLabel = 'KEMBALI KERJA';
+                    isDone = false;
+                } else if (hasClockedIn && hasBreakIn) {
+                    isDone = true;
+                    actionLabel = 'SUDAH MASUK';
+                }
+
+                 return (
+                    <TouchableOpacity 
+                        onPress={() => handleAttendance(actionType)}
+                        disabled={isDone || isOnLeave || (actionType === 'clock_in' && isOffSchedule)}
+                        className={`flex-1 h-32 rounded-3xl items-center justify-center ${locationEnabled && !isDone && !isOnLeave && !(actionType === 'clock_in' && isOffSchedule) ? (actionType === 'break_in' ? 'bg-orange-500' : 'bg-blue-600') : 'bg-slate-100'}`}
+                    >
+                        <Camera size={32} color={locationEnabled && !isDone && !isOnLeave && !(actionType === 'clock_in' && isOffSchedule) ? 'white' : '#cbd5e1'} />
+                        <Text className={`font-bold mt-2 ${locationEnabled && !isDone && !isOnLeave && !(actionType === 'clock_in' && isOffSchedule) ? 'text-white' : 'text-slate-400'}`}>
+                            {isOnLeave ? 'SEDANG IZIN' : (isOffSchedule && !hasClockedIn ? 'JADWAL LIBUR' : actionLabel)}
+                        </Text>
+                    </TouchableOpacity>
+                );
+            })()}
 
             <TouchableOpacity 
                 onPress={() => handleAttendance('clock_out')}

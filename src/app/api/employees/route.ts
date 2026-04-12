@@ -61,7 +61,7 @@ export async function GET(request: Request) {
       CROSS JOIN (SELECT ? as range_val, ? as start_date, ? as end_date, ? as jakarta_date) as params
       LEFT JOIN positions p ON e.position_id = p.id
       WHERE ${whereClause}
-      ORDER BY e.full_name ASC
+      ORDER BY e.id ASC
     `, [jakartaDate, jakartaTime, jakartaDate, jakartaDate, jakartaDate, ...sqlParams.slice(2)]);
     
     // Process status for frontend

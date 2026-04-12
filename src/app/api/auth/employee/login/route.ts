@@ -3,6 +3,18 @@ import db from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { encrypt } from '@/lib/auth';
 
+export async function OPTIONS() {
+    return new NextResponse(null, {
+        status: 204,
+        headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400',
+        },
+    });
+}
+
 export async function POST(req: Request) {
     try {
         const { employee_code, password } = await req.json();
@@ -64,7 +76,14 @@ export async function POST(req: Request) {
                 employee_code: employee.employee_code,
                 full_name: employee.full_name,
                 position: employee.position_name,
-                is_pic: isPic
+                is_pic: isPic,
+                role: isPic ? 'admin' : 'employee'
+            }
+        }, {
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
             }
         });
 

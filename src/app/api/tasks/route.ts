@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getJakartaNow } from '@/lib/dateUtils';
-import { notifySupportStatusChange } from '@/lib/notifications';
 
 export async function GET(req: Request) {
     try {
@@ -283,11 +282,7 @@ export async function PATCH(req: Request) {
             );
         }
 
-        // Trigger Multi-role notification for status change
-        const finalNewStatus = status === 'in_progress' || status === 'Sedang Dikerjakan' ? 'Sedang Dikerjakan' : (status === 'completed' || status === 'Resolved' ? 'Sudah Diperbaiki' : status);
-        if (finalNewStatus !== oldStatus) {
-            await notifySupportStatusChange(id, finalNewStatus, itemName, type || 'manual');
-        }
+        // (notifySupportStatusChange removed)
 
         return NextResponse.json({ success: true, message: 'Status berhasil diperbarui' });
     } catch (error: any) {

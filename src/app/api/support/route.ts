@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getJakartaNow } from '@/lib/dateUtils';
-import { sendExpoPushNotification } from '@/lib/notifications';
+import { sendWhatsApp } from '@/lib/whatsapp';
 
 export async function GET(req: Request) {
   try {
@@ -218,26 +218,36 @@ export async function POST(req: Request) {
       }
     }
 
-    // Trigger Push Notifications for assignees
+    // Trigger WhatsApp Notifications for assignees
     if (assigneesArray.length > 0) {
+      console.log(`[Support API] Attempting to send WA to assignees: ${assigneesArray.join(', ')}`);
       try {
-        const techniciansToNotify: any = await db.query(
-          'SELECT id, full_name, push_token FROM employees WHERE id IN (?) AND push_token IS NOT NULL',
-          [assigneesArray]
-        );
-
-        if (techniciansToNotify.length > 0) {
-          const tokens = techniciansToNotify.map((e: any) => e.push_token);
-          await sendExpoPushNotification(
-            tokens,
-            'Penugasan Tiket Baru 🛠️',
-            `Halo! Anda ditugaskan untuk menangani tiket #${ticketId} (${customer_name}). Silakan periksa detailnya di aplikasi mobile.`,
-            { ticketId: ticketId.toString(), customerName: customer_name }
-          );
+        const empRows: any = await db.query('SELECT id, full_name, phone FROM employees WHERE id IN (?)', [assigneesArray]);
+        console.log(`[Support API] Found ${empRows.length} employees with phone info`);
+        for (const emp of empRows) {
+          if (emp.phone) {
+            const waMsg = `*PENUGASAN TIKET BARU* 🛠️\n\n` +
+                        `Halo *${emp.full_name}*,\n` +
+                        `Anda telah ditugaskan untuk tiket baru:\n\n` +
+                        `ID Tiket: #${ticketId}\n` +
+                        `Pelanggan: ${customer_name}\n` +
+                        `Kategori: ${category}\n` +
+                        `Keluhan: ${description || '-'}\n` +
+                        `Prioritas: ${priority}\n\n` +
+                        `Silahkan cek aplikasi mobile ITNET untuk detail lebih lanjut.`;
+            
+            console.log(`[Support API] Sending WA to ${emp.full_name} (${emp.phone})`);
+            const res = await sendWhatsApp(emp.phone, waMsg);
+            console.log(`[Support API] Result for ${emp.full_name}:`, res.success ? 'SUCCESS' : 'FAILED - ' + res.message);
+          } else {
+            console.log(`[Support API] Employee ${emp.full_name} has no phone number`);
+          }
         }
-      } catch (pushError) {
-        console.error('[Push] Error sending ticket assignment notification:', pushError);
+      } catch (waErr) {
+        console.error('[Support API] Failed to send WA notification:', waErr);
       }
+    } else {
+      console.log('[Support API] No assignees found, skipping WA notification');
     }
 
     return NextResponse.json({ 

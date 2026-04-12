@@ -15,10 +15,10 @@ import {
 
 // --- Utility Functions (Timezone Safe) ---
 const formatDate = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 const getStartOfMonth = (date: Date) => {
@@ -65,7 +65,7 @@ export default function SchedulePageContent() {
           fetch('/api/employees').then(res => res.json()),
           fetch('/api/presence/shifts').then(res => res.json()),
           fetch(`/api/presence/schedule?start=${start}&end=${end}`).then(res => res.json()),
-          fetch(`https://dayoffapi.vercel.app/api?year=${year}`).then(res => res.json()).catch(() => ({ success: false }))
+          fetch(`/api/presence/holidays?year=${year}`).then(res => res.json()).catch(() => ({ success: false }))
         ]);
 
         if(empRes.success) setEmployees(Array.isArray(empRes.data) ? empRes.data.filter((e: any) => e.use_presence === 1) : []);
@@ -135,7 +135,23 @@ export default function SchedulePageContent() {
     });
     if (explicitShift) return explicitShift;
 
-    // 2. NOC Rule: Fallback to FULL if not scheduled
+    // 2. Sunday/Holiday Rule (Priority over other defaults)
+    const day = date.getDay();
+    const isSunday = day === 0;
+    const holiday = holidays.find(h => h.date === dateStr);
+    const isHoliday = !!holiday;
+
+    if (isSunday || isHoliday) {
+      return {
+        id: 'libur_default',
+        shift_name: 'LIBUR',
+        full_name: holiday?.description || (isSunday ? 'Hari Minggu' : ''),
+        color: '#ff3b30',
+        isDefault: true
+      };
+    }
+
+    // 3. NOC Rule: Fallback to FULL if not scheduled
     if (isNOC) {
       return {
         id: 'full_noc',
@@ -146,44 +162,39 @@ export default function SchedulePageContent() {
       };
     }
 
-    // 3. Saturday Rule for Ria Puspitasari and Nurani
-    const day = date.getDay();
-    const isSaturday = day === 6;
+    // 4. Target Employees (Office/Admin: Ria and Nurani)
     const isTargetEmployee = ['ria puspitasari', 'nurani', 'nurani mila utami'].includes(employee.full_name?.toLowerCase());
 
+    // 5. Friday Rule: Everyone except Ria and Nurani is MAN DAY
+    const isFriday = day === 5;
+    if (isFriday && !isTargetEmployee) {
+      return {
+        id: 'man_day',
+        shift_name: 'MAN DAY',
+        full_name: 'MAN DAY',
+        color: '#34c759', // Green
+        isDefault: true
+      };
+    }
+
+    // 6. Saturday Rule: Ria and Nurani is SABTU CERIA
+    const isSaturday = day === 6;
     if (isSaturday && isTargetEmployee) {
       return {
         id: 'sabtu_ceria',
         shift_name: 'SABTU CERIA',
         full_name: 'SABTU CERIA',
-        color: '#ff9100', // Orange
+        color: '#ff9100', // Orange-ish
         isDefault: true
       };
     }
 
-    // 4. Sunday/Holiday Rule
-    const isSunday = day === 0;
-    const holiday = holidays.find(h => h.date === dateStr);
-    const isHoliday = !!holiday;
-
-    if (isSunday || isHoliday) {
-      return {
-        id: 'libur_default',
-        shift_name: isHoliday ? holiday.name.split(' ')[0].toUpperCase() : 'LIBUR',
-        full_name: isHoliday ? holiday.name : 'LIBUR HARI MINGGU',
-        color: '#f43f5e', // Red
-        isDefault: true
-      };
-    }
-
-    // 5. Default Normal Shift
-    const normalDayShift = shifts.find(s => s.shift_name?.toLowerCase().includes('normal') || s.id === 1);
+    // 7. Default Normal Shift
     return {
-      ...(normalDayShift || { shift_name: 'NORMAL', color: '#10b981' }),
       id: 'default_normal',
-      isDefault: true,
       shift_name: 'NORMAL',
-      color: '#10b981'
+      color: '#10b981',
+      isDefault: true
     };
   };
 
@@ -212,12 +223,11 @@ export default function SchedulePageContent() {
             d.setMonth(d.getMonth() + 1);
             setCurrentDate(d);
           }}><NextIcon /></IconButton>
-          <Button variant="outlined" sx={{ borderRadius: 3, fontWeight: 700 }} onClick={() => setCurrentDate(new Date())}>Hari Ini</Button>
         </Stack>
       </Stack>
 
       <Card sx={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 30px rgba(0,0,0,0.08)' }}>
-        <TableContainer sx={{ maxHeight: '70vh' }}>
+        <TableContainer>
           <Table sx={{ minWidth: 1500, tableLayout: 'fixed' }}>
             <TableHead sx={{ bgcolor: '#f8f9fa', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid', borderColor: 'divider' }}>
               <TableRow>
@@ -225,15 +235,27 @@ export default function SchedulePageContent() {
                 {monthDays.map(d => {
                   const dateStr = formatDate(d);
                   const isSunday = d.getDay() === 0;
-                  const isHoliday = holidays.some(h => h.date === dateStr);
+                  const holiday = holidays.find(h => h.date === dateStr);
+                  const isHoliday = !!holiday;
                   const isRed = isSunday || isHoliday;
                   
                   return (
-                    <TableCell key={dateStr} align="center" sx={{ fontWeight: 800, width: 70, p: 1, bgcolor: isRed ? alpha(theme.palette.error.main, 0.02) : 'transparent' }}>
-                      <Typography variant="caption" color={isRed ? 'error.main' : 'text.secondary'} sx={{ fontWeight: 900, fontSize: '0.65rem' }}>
-                        {d.toLocaleDateString('id-ID', { weekday: 'short' }).toUpperCase()}
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 900, color: isRed ? 'error.main' : 'text.primary' }}>{d.getDate()}</Typography>
+                    <TableCell key={dateStr} align="center" sx={{ 
+                      fontWeight: 800, 
+                      width: 70, 
+                      p: 0, 
+                      bgcolor: isRed ? alpha(theme.palette.error.main, 0.05) : 'transparent',
+                      borderBottom: isHoliday ? '3px solid' : 'none',
+                      borderColor: 'error.main'
+                    }}>
+                      <Tooltip title={holiday?.name || (isSunday ? 'Hari Minggu' : '')} arrow disableHoverListener={!isRed}>
+                        <Box sx={{ p: 1, width: '100%', height: '100%' }}>
+                          <Typography variant="caption" color={isRed ? 'error.main' : 'text.secondary'} sx={{ fontWeight: 900, fontSize: '0.65rem', display: 'block' }}>
+                            {d.toLocaleDateString('id-ID', { weekday: 'short' }).toUpperCase()}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 900, color: isRed ? 'error.main' : 'text.primary' }}>{d.getDate()}</Typography>
+                        </Box>
+                      </Tooltip>
                     </TableCell>
                   );
                 })}
@@ -274,7 +296,7 @@ export default function SchedulePageContent() {
                       >
                         {shift ? (
                           <Chip 
-                            label={shift.shift_name === 'Normal Day' ? 'Normal' : shift.shift_name} 
+                            label={shift.shift_name} 
                             sx={{ 
                               bgcolor: alpha(shift.color || '#0a84ff', 0.1), 
                               color: shift.color ? alpha(shift.color, 1) : '#0a84ff', 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { sendExpoPushNotification } from '@/lib/notifications';
+import { sendWhatsApp } from '@/lib/whatsapp';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,26 +108,24 @@ export async function PUT(request: Request) {
             WHERE id = ?
         `, [status, approved_by, id]);
 
-        // Send Push Notification
+        // Trigger WhatsApp Notification
         try {
-            const data: any = await db.query(`
-                SELECT l.type, e.push_token 
-                FROM leave_requests l
-                JOIN employees e ON l.employee_id = e.id
-                WHERE l.id = ?
-            `, [id]);
-
-            if (data && data[0]?.push_token) {
-                const statusLabel = status === 'approved' ? 'Disetujui' : 'Ditolak';
-                await sendExpoPushNotification(
-                    [data[0].push_token],
-                    `Permohonan ${data[0].type} ${statusLabel}`,
-                    `Permohonan ${data[0].type} Anda telah ${statusLabel.toLowerCase()} oleh PIC.`
-                );
+            const empInfo: any = await db.query(
+                'SELECT e.full_name, e.phone, l.type, l.start_date, l.end_date FROM leave_requests l JOIN employees e ON l.employee_id = e.id WHERE l.id = ?', 
+                [id]
+            );
+            if (empInfo.length > 0 && empInfo[0].phone) {
+                const emp = empInfo[0];
+                const statusLabel = status === 'approved' ? 'DISETUJUI ✅' : 'DITOLAK ❌';
+                const waMsg = `*UPDATE STATUS IZIN/CUTI* 📝\n\n` +
+                            `Halo *${emp.full_name}*,\n` +
+                            `Permohonan *${emp.type}* Anda telah *${statusLabel}*.\n\n` +
+                            `Tanggal: ${new Date(emp.start_date).toLocaleDateString('id-ID')} s/d ${new Date(emp.end_date).toLocaleDateString('id-ID')}\n\n` +
+                            `Silahkan cek detailnya di aplikasi ITNET.`;
+                await sendWhatsApp(emp.phone, waMsg);
             }
-        } catch (pushError) {
-            console.error('[Push] Error sending leave update notification:', pushError);
-            // Don't fail the whole request if push fails
+        } catch (waErr) {
+            console.error('[Leave API] Failed to send WA notification:', waErr);
         }
 
         return NextResponse.json({ success: true, message: 'Status izin berhasil diperbarui' });

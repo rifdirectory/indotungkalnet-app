@@ -12,8 +12,19 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, message: 'No file uploaded' }, { status: 400 });
         }
 
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
+        let buffer: Buffer;
+        if (typeof file === 'string') {
+            // If somehow it's a string (e.g. base64 or path), convert to buffer
+            buffer = Buffer.from(file, 'base64');
+        } else if (file instanceof Blob || (file as any).arrayBuffer) {
+            // Standard Blob/File
+            const bytes = await (file as any).arrayBuffer();
+            buffer = Buffer.from(bytes);
+        } else {
+            // Fallback for other objects that might contain the data
+            const bytes = await (file as any).arrayBuffer?.() || Buffer.from(await (file as any).text());
+            buffer = Buffer.from(bytes);
+        }
 
         // Path for storage
         const uploadDir = join(process.cwd(), 'public', 'uploads', 'presence');

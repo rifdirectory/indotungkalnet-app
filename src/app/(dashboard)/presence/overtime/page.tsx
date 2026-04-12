@@ -24,6 +24,7 @@ import {
 import { 
   Add as AddIcon
 } from "@mui/icons-material";
+import { formatToJakartaDate } from '@/lib/dateUtils';
 
 export default function OvertimeManagementPage() {
   const theme = useTheme();
@@ -43,6 +44,18 @@ export default function OvertimeManagementPage() {
     ticket_id: ''
   });
 
+  // Filter States
+  const now = new Date();
+  const [filterMonth, setFilterMonth] = useState(now.getMonth() + 1);
+  const [filterYear, setFilterYear] = useState(now.getFullYear());
+  const [searchName, setSearchName] = useState('');
+
+  const months = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+  const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
+
   const fetchData = async (currentUser?: any) => {
     const session = currentUser || user;
     let empUrl = '/api/employees';
@@ -50,9 +63,14 @@ export default function OvertimeManagementPage() {
       empUrl += `?pic_id=${session.id}`;
     }
 
+    let ovUrl = `/api/presence/overtime?month=${filterMonth}&year=${filterYear}`;
+    if (searchName) {
+      ovUrl += `&name=${encodeURIComponent(searchName)}`;
+    }
+
     try {
       const [oRes, eRes, tRes] = await Promise.all([
-        fetch('/api/presence/overtime').then(res => res.json()),
+        fetch(ovUrl).then(res => res.json()),
         fetch(empUrl).then(res => res.json()),
         fetch('/api/support?status=active').then(res => res.json())
       ]);
@@ -91,6 +109,10 @@ export default function OvertimeManagementPage() {
     };
     init();
   }, []);
+
+  useEffect(() => {
+    if (user) fetchData();
+  }, [filterMonth, filterYear, searchName]);
 
   const handleCreateOvertime = async () => {
     setLoading(true);
@@ -131,6 +153,43 @@ export default function OvertimeManagementPage() {
         </Button>
       </Stack>
 
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 3 }} alignItems="center">
+        <TextField
+          select
+          size="small"
+          label="Bulan"
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(Number(e.target.value))}
+          sx={{ minWidth: 150 }}
+        >
+          <MenuItem value={0}>Semua Bulan</MenuItem>
+          {months.map((m, i) => (
+            <MenuItem key={m} value={i + 1}>{m}</MenuItem>
+          ))}
+        </TextField>
+        
+        <TextField
+          select
+          size="small"
+          label="Tahun"
+          value={filterYear}
+          onChange={(e) => setFilterYear(Number(e.target.value))}
+          sx={{ minWidth: 100 }}
+        >
+          {years.map((y) => (
+            <MenuItem key={y} value={y}>{y}</MenuItem>
+          ))}
+        </TextField>
+
+        <TextField
+          size="small"
+          placeholder="Cari Nama Karyawan..."
+          value={searchName}
+          onChange={(e) => setSearchName(e.target.value)}
+          sx={{ flexGrow: 1, '& .MuiOutlinedInput-root': { borderRadius: 3 } }}
+        />
+      </Stack>
+
       <Card sx={{ borderRadius: 3, p: 2 }}>
         <TableContainer>
           <Table>
@@ -147,7 +206,7 @@ export default function OvertimeManagementPage() {
             <TableBody>
               {overtimes.map((o) => (
                 <TableRow key={o.id}>
-                  <TableCell sx={{ fontWeight: 600 }}>{o.date}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{formatToJakartaDate(o.date)}</TableCell>
                   <TableCell>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{o.employee_name}</Typography>
                     <Typography variant="caption" color="text.secondary">{o.position_name}</Typography>

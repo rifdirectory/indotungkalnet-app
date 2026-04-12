@@ -13,9 +13,13 @@ export async function GET() {
             )
         `);
 
-        // Get office coordinates
-        const rows = await db.query('SELECT * FROM settings WHERE setting_key IN ("office_latitude", "office_longitude", "office_radius")');
-        const settings: any = {};
+        // Get office coordinates & WA settings
+        const rows = await db.query('SELECT * FROM settings WHERE setting_key IN ("office_latitude", "office_longitude", "office_radius", "wa_gateway_url", "wa_api_token", "wa_notification_enabled", "wa_gateway_mode")');
+        const settings: any = {
+            wa_gateway_url: 'https://api.fonnte.com/send', // Default
+            wa_notification_enabled: '0',
+            wa_gateway_mode: 'cloud' // cloud or local
+        };
         (rows as any[]).forEach(row => {
             settings[row.setting_key] = row.setting_value;
         });
@@ -28,12 +32,20 @@ export async function GET() {
 
 export async function POST(req: Request) {
     try {
-        const { office_latitude, office_longitude, office_radius } = await req.json();
+        const { 
+            office_latitude, office_longitude, office_radius,
+            wa_gateway_url, wa_api_token, wa_notification_enabled,
+            wa_gateway_mode
+        } = await req.json();
         
         const updates = [
             { key: 'office_latitude', value: office_latitude },
             { key: 'office_longitude', value: office_longitude },
-            { key: 'office_radius', value: office_radius }
+            { key: 'office_radius', value: office_radius },
+            { key: 'wa_gateway_url', value: wa_gateway_url },
+            { key: 'wa_api_token', value: wa_api_token },
+            { key: 'wa_notification_enabled', value: wa_notification_enabled },
+            { key: 'wa_gateway_mode', value: wa_gateway_mode }
         ];
 
         for (const item of updates) {

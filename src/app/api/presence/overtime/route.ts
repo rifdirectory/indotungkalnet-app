@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
-import { sendExpoPushNotification } from '@/lib/notifications';
+import { sendWhatsApp } from '@/lib/whatsapp';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +9,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const picId = searchParams.get('pic_id');
     const employeeId = searchParams.get('employee_id');
+    const month = searchParams.get('month');
+    const year = searchParams.get('year');
+    const name = searchParams.get('name');
 
     let sql = `
       SELECT o.*, e.full_name as employee_name, p.name as position_name, 
@@ -20,13 +23,31 @@ export async function GET(request: Request) {
       LEFT JOIN support_tickets t ON o.ticket_id = t.id
     `;
     const params: any[] = [];
+    const whereClauses: string[] = [];
 
     if (picId) {
-      sql += ' WHERE o.pic_id = ?';
+      whereClauses.push('o.pic_id = ?');
       params.push(picId);
-    } else if (employeeId) {
-      sql += ' WHERE o.employee_id = ?';
+    } 
+    if (employeeId) {
+      whereClauses.push('o.employee_id = ?');
       params.push(employeeId);
+    }
+    if (month && month !== '0') {
+      whereClauses.push('MONTH(o.date) = ?');
+      params.push(month);
+    }
+    if (year) {
+      whereClauses.push('YEAR(o.date) = ?');
+      params.push(year);
+    }
+    if (name) {
+      whereClauses.push('e.full_name LIKE ?');
+      params.push(`%${name}%`);
+    }
+
+    if (whereClauses.length > 0) {
+      sql += ' WHERE ' + whereClauses.join(' AND ');
     }
 
     sql += ' ORDER BY o.date DESC, o.created_at DESC';
@@ -53,6 +74,24 @@ export async function POST(request: Request) {
       VALUES (?, ?, ?, ?, ?, ?)
     `, [employee_id, pic_id, date, duration_minutes, task_desc, ticket_id || null]);
 
+    // Trigger WhatsApp Notification
+    try {
+        const empRows: any = await db.query('SELECT full_name, phone FROM employees WHERE id = ?', [employee_id]);
+        if (empRows.length > 0 && empRows[0].phone) {
+            const emp = empRows[0];
+            const waMsg = `*PENUGASAN LEMBUR BARU* ⏰\n\n` +
+                        `Halo *${emp.full_name}*,\n` +
+                        `Anda mendapatkan penugasan lembur baru:\n\n` +
+                        `Tanggal: ${new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}\n` +
+                        `Durasi: ${duration_minutes} Menit\n` +
+                        `Tugas: ${task_desc || '-'}\n\n` +
+                        `Silahkan cek aplikasi ITNET untuk detailnya.`;
+            await sendWhatsApp(emp.phone, waMsg);
+        }
+    } catch (waErr) {
+        console.error('[Overtime API] Failed to send WA notification (POST):', waErr);
+    }
+
     return NextResponse.json({ success: true, message: 'Penugasan lembur berhasil dibuat' });
   } catch (error) {
     console.error('API Error:', error);
@@ -75,26 +114,24 @@ export async function PUT(request: Request) {
       WHERE id = ?
     `, [status, approved_by || 1, id]);
 
-    // Send Push Notification
+    // Trigger WhatsApp Notification
     try {
-        const data: any = await db.query(`
-            SELECT o.date, e.push_token 
-            FROM overtime_requests o
-            JOIN employees e ON o.employee_id = e.id
-            WHERE o.id = ?
-        `, [id]);
-
-        if (data && data[0]?.push_token) {
-            const statusLabel = status === 'approved' ? 'Disetujui' : 'Ditolak';
-            const dateStr = new Date(data[0].date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-            await sendExpoPushNotification(
-                [data[0].push_token],
-                `Lembur ${statusLabel}`,
-                `Permohonan lembur Anda (${dateStr}) telah ${statusLabel.toLowerCase()} oleh PIC.`
-            );
+        const empInfo: any = await db.query(
+            'SELECT e.full_name, e.phone, o.date, o.task_desc FROM overtime_requests o JOIN employees e ON o.employee_id = e.id WHERE o.id = ?', 
+            [id]
+        );
+        if (empInfo.length > 0 && empInfo[0].phone) {
+            const emp = empInfo[0];
+            const statusLabel = status === 'approved' ? 'DISETUJUI ✅' : 'DITOLAK ❌';
+            const waMsg = `*UPDATE STATUS LEMBUR* ⏰\n\n` +
+                        `Halo *${emp.full_name}*,\n` +
+                        `Status lembur Anda pada tanggal *${new Date(emp.date).toLocaleDateString('id-ID')}* telah *${statusLabel}*.\n\n` +
+                        `Tugas: ${emp.task_desc || '-'}\n\n` +
+                        `Silahkan cek detailnya di aplikasi ITNET.`;
+            await sendWhatsApp(emp.phone, waMsg);
         }
-    } catch (pushError) {
-        console.error('[Push] Error sending overtime update notification:', pushError);
+    } catch (waErr) {
+        console.error('[Overtime API] Failed to send WA notification (PUT):', waErr);
     }
 
     return NextResponse.json({ success: true, message: 'Status lembur berhasil diperbarui' });

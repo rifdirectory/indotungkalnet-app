@@ -1,21 +1,14 @@
-const mysql = require('mysql2/promise');
+const db = require('./src/lib/db').default;
 
-async function listTables() {
-    const connection = await mysql.createConnection({
-        host: 'localhost',
-        user: 'root',
-        password: 'advance',
-        database: 'indotungkal_db'
-    });
-
-    try {
-        const [rows] = await connection.execute("SHOW TABLES");
-        console.log('Tables in indotungkal_db:', JSON.stringify(rows, null, 2));
-    } catch (err) {
-        console.error(err);
-    } finally {
-        await connection.end();
-    }
+async function run() {
+  try {
+    const tables = await db.query("SHOW TABLES");
+    console.log(JSON.stringify(tables, null, 2));
+    process.exit(0);
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
+  }
 }
 
-listTables();
+run();

@@ -48,10 +48,10 @@ export async function createSession(userId: number, username: string, role: stri
 export async function destroySession() {
   const cookieStore = await cookies();
   cookieStore.set('session', '', {
-    expires: new Date(0),
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
+    maxAge: 0, // Explicitly expire immediately
   });
 }

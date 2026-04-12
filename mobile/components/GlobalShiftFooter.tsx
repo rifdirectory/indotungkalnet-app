@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../utils/storage';
 import { Clock, Calendar } from 'lucide-react-native';
 import axios from 'axios';
 import { usePathname } from 'expo-router';
@@ -15,8 +15,12 @@ export default function GlobalShiftFooter() {
     const [leaveType, setLeaveType] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [isVisible, setIsVisible] = useState(true);
+    const isFetching = useRef(false);
 
     const fetchStatus = useCallback(async () => {
+        if (isFetching.current) return;
+        isFetching.current = true;
+        
         try {
             const id = await SecureStore.getItemAsync('user_id');
             if (!id) {
@@ -37,10 +41,16 @@ export default function GlobalShiftFooter() {
             console.error('[Footer] Fetch Error:', error);
         } finally {
             setLoading(false);
+            isFetching.current = false;
         }
     }, []);
 
     useEffect(() => {
+        if (pathname === '/' || pathname === '') {
+            setIsVisible(false);
+            return;
+        }
+        
         fetchStatus();
         
         // Listen for internal refresh signals (e.g. from ScheduleScreen)
@@ -57,18 +67,38 @@ export default function GlobalShiftFooter() {
         };
     }, [fetchStatus, pathname]); // Refresh on signal or navigation
 
-    if (!isVisible || pathname === '/') return null;
-
     return (
         <View 
             style={{ 
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: -6 },
-                shadowOpacity: 0.1,
-                shadowRadius: 12,
-                elevation: 35, // High elevation for Android visibility
+                display: (isVisible && pathname !== '/' && pathname !== '') ? 'flex' : 'none',
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                backgroundColor: 'white',
+                borderTopWidth: 1,
+                borderTopColor: '#f1f5f9', // slate-100
+                paddingHorizontal: 24,
+                paddingTop: 16,
+                paddingBottom: Platform.OS === 'ios' ? 34 : 20, // Account for safe area
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                zIndex: 1000,
+                ...Platform.select({
+                    web: {
+                        boxShadow: '0 -6px 12px rgba(0,0,0,0.1)',
+                        position: 'fixed' as any,
+                    },
+                    default: {
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: -6 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 12,
+                        elevation: 35,
+                    }
+                })
             }}
-            className="bg-white border-t border-slate-100 px-6 py-4 flex-row items-center justify-between"
         >
             <View className="flex-row items-center flex-1">
                 <View className={`w-10 h-10 rounded-xl items-center justify-center mr-3 border ${isOnLeave ? 'bg-amber-50 border-amber-100' : 'bg-blue-50 border-blue-100'}`}>

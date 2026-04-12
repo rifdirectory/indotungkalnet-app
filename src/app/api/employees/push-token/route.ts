@@ -9,6 +9,13 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, message: 'Missing employee_id or push_token' }, { status: 400 });
         }
 
+        // 1. Remove this token from any other employees who might have it (shared/previous device)
+        await query(
+            'UPDATE employees SET push_token = NULL WHERE push_token = ? AND id != ?',
+            [push_token, employee_id]
+        );
+
+        // 2. Assign token to the current employee
         await query(
             'UPDATE employees SET push_token = ? WHERE id = ?',
             [push_token, employee_id]

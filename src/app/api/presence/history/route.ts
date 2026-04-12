@@ -138,6 +138,33 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, message: 'Data tidak lengkap' }, { status: 400 });
         }
 
+        // Schedule / Off-Day logic
+        if (type === 'clock_in') {
+            const employeeData: any = await query(`
+                SELECT p.use_presence, p.name as position_name 
+                FROM employees e 
+                LEFT JOIN positions p ON e.position_id = p.id 
+                WHERE e.id = ?
+            `, [employee_id]);
+            const emp = employeeData[0] || {};
+            const isNOC = emp.position_name?.toLowerCase().includes('noc');
+            const isSunday = now.getDay() === 0;
+
+            const shiftRows: any = await query(`
+                SELECT s.id FROM shifts s
+                JOIN employee_shifts es ON s.id = es.shift_id
+                WHERE es.employee_id = ? AND es.date = ?
+            `, [employee_id, currentDate]);
+            
+            const hasExplicitShift = shiftRows && shiftRows.length > 0;
+            const isOffSchedule = !isNOC && !hasExplicitShift && (isSunday || emp.use_presence === 0);
+
+            if (isOffSchedule) {
+                return NextResponse.json({ success: false, message: 'Jadwal Anda hari ini adalah Libur / Off. Anda ditekan dari melakukan absen masuk.' }, { status: 400 });
+            }
+        }
+
+
         // Check if user is on approved leave today
         const leaveCheck: any = await query(`
             SELECT id, type FROM leave_requests 
@@ -161,6 +188,22 @@ export async function POST(req: Request) {
             if ((existingIn as any[]).length > 0) {
                 return NextResponse.json({ success: false, message: 'Anda sudah melakukan absen masuk hari ini.' }, { status: 400 });
             }
+        } else if (type === 'break_in') {
+            const existingBreakIn = await query(
+                'SELECT id FROM attendance WHERE employee_id = ? AND type = "break_in" AND DATE(timestamp) = ?',
+                [employee_id, currentDate]
+            );
+            if ((existingBreakIn as any[]).length > 0) {
+                return NextResponse.json({ success: false, message: 'Anda sudah melakukan absen kembali dari istirahat hari ini.' }, { status: 400 });
+            }
+            
+            const checkInExists = await query(
+                'SELECT id FROM attendance WHERE employee_id = ? AND type = "clock_in" AND DATE(timestamp) = ?',
+                [employee_id, currentDate]
+            );
+            if ((checkInExists as any[]).length === 0) {
+                return NextResponse.json({ success: false, message: 'Anda belum absen masuk hari ini. Silakan absen masuk terlebih dahulu.' }, { status: 400 });
+            }
         } else {
             // Clock-out checks
             const existingOut = await query(
@@ -181,7 +224,6 @@ export async function POST(req: Request) {
         }
 
         // 2. Load Shift for Timing Calculations
-        // Fallback to 08:00 - 17:00 if no specific shift is assigned today
         const shiftRows: any = await query(`
             SELECT s.* FROM shifts s
             JOIN employee_shifts es ON s.id = es.shift_id
@@ -195,17 +237,14 @@ export async function POST(req: Request) {
             const startStr = shift?.start_time || '08:00:00';
             const [sh, sm] = startStr.split(':').map(Number);
             const shiftStartMinutes = (sh * 60) + sm;
-
-            // Late if more than 20 minutes past start
             if (currentMinutes > (shiftStartMinutes + 20)) {
                 status = 'late';
             }
-        } else {
+        } else if (type === 'clock_out') {
             const endStr = shift?.end_time || '17:00:00';
             const [eh, em] = endStr.split(':').map(Number);
             const shiftEndMinutes = (eh * 60) + em;
 
-            // Block extremely early clock-out (Allowed up to 10 minutes before shift ends)
             if (currentMinutes < (shiftEndMinutes - 10)) {
                 const targetHour = Math.floor((shiftEndMinutes - 10) / 60);
                 const targetMin = (shiftEndMinutes - 10) % 60;
@@ -216,6 +255,10 @@ export async function POST(req: Request) {
                     message: `Terlalu awal untuk absen pulang. Sesuai aturan, Anda baru bisa absen maksimal 10 menit sebelum pukul ${endStr.substring(0, 5)} (Mulai pukul ${timeStr}).` 
                 }, { status: 400 });
             }
+        } else if (type === 'break_in') {
+             // Optional: Add late check for break return if needed
+             // For now, it's just recorded as on_time
+             status = 'on_time';
         }
 
         // 3. Record Attendance

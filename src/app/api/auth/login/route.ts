@@ -3,6 +3,18 @@ import bcrypt from 'bcryptjs';
 import db from '@/lib/db';
 import { createSession } from '@/lib/auth';
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400',
+    },
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -38,6 +50,15 @@ export async function POST(request: Request) {
 
     if (!found) {
       return NextResponse.json({ message: 'Invalid credentials' }, { status: 401 });
+    }
+
+    // WHITELIST CHECK: Only allow admin and specific employees to access the web app
+    const allowedNames = ['admin', 'Arifin Ahmad', 'Ria Puspitasari', 'Nurani Mila Utami'];
+    const currentIdentity = user.username || user.full_name;
+    
+    if (!allowedNames.includes(currentIdentity)) {
+      console.warn(`[Auth] Blocked login attempt for ${currentIdentity} - Not in whitelist.`);
+      return NextResponse.json({ message: 'Maaf, akun Anda tidak memiliki akses ke Web Dashboard.' }, { status: 403 });
     }
 
     // Verify password (works for both users.password_hash and employees.password)

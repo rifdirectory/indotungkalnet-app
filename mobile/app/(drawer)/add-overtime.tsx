@@ -24,7 +24,7 @@ import {
   Check,
   ChevronRight
 } from 'lucide-react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../../utils/storage';
 import axios from 'axios';
 import { API_URL } from '../../services/api';
 

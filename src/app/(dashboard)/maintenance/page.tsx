@@ -137,8 +137,8 @@ export default function MaintenancePage() {
   const [selectedJob, setSelectedJob] = useState<any>(null);
   
   // Filter States
-  const [range, setRange] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [range, setRange] = useState('month');
+  const [statusFilter, setStatusFilter] = useState('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [customDates, setCustomDates] = useState({ start: '', end: '' });
 
@@ -417,8 +417,8 @@ export default function MaintenancePage() {
                   '& .MuiTabs-indicator': { height: 3, borderRadius: '3px 3px 0 0' }
                 }}
               >
-                <Tab label="SEMUA" value="all" />
                 <Tab label="AKTIF" value="active" />
+                <Tab label="SEMUA" value="all" />
                 <Tab label="SELESAI" value="finished" />
               </Tabs>
 

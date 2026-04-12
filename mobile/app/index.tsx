@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Fingerprint, Smartphone, User, Lock } from 'lucide-react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../utils/storage';
 import { API_URL } from '../services/api';
 import axios from 'axios';
 
@@ -23,6 +23,27 @@ export default function LoginScreen() {
   const [employeeCode, setEmployeeCode] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    async function checkSession() {
+      const token = await SecureStore.getItemAsync('user_token');
+      if (token) {
+        router.replace('/(drawer)/home');
+      } else {
+        setChecking(false);
+      }
+    }
+    checkSession();
+  }, []);
+
+  if (checking) {
+    return (
+        <View className="flex-1 items-center justify-center bg-white">
+            <ActivityIndicator size="large" color="#2563eb" />
+        </View>
+    );
+  }
 
   const handleLogin = async () => {
     if (!employeeCode || !password) {
@@ -39,18 +60,23 @@ export default function LoginScreen() {
 
       if (response.data.success) {
         // Simpan data user ke SecureStore
-        const { full_name, position, id, is_pic } = response.data.data;
-        await SecureStore.setItemAsync('user_name', full_name);
-        await SecureStore.setItemAsync('user_position', position);
-        await SecureStore.setItemAsync('user_id', id.toString());
+        const { full_name, position, id, is_pic, role } = response.data.data;
+        // SecureStore values must be strings!
+        await SecureStore.setItemAsync('user_name', full_name || '');
+        await SecureStore.setItemAsync('user_position', position || '');
+        await SecureStore.setItemAsync('user_id', String(id));
         await SecureStore.setItemAsync('user_is_pic', is_pic ? 'true' : 'false');
+        await SecureStore.setItemAsync('user_role', role || 'employee');
+        await SecureStore.setItemAsync('user_token', response.data.token || '');
         
         router.replace('/(drawer)/home');
       } else {
         Alert.alert('Gagal', response.data.message);
       }
     } catch (error: any) {
-      const msg = error.response?.data?.message || 'Gagal terhubung ke server';
+      console.log('Login error:', error);
+      // Determine error source (Axios network error vs JS runtime error)
+      const msg = error.response?.data?.message || error.message || 'Gagal terhubung ke server';
       Alert.alert('Eror Login', msg);
     } finally {
       setLoading(false);

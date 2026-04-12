@@ -15,10 +15,10 @@ export function Header() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
-      router.push('/login');
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error('Logout API failed:', error);
     }
+    window.location.href = '/login';
   };
 
   return (

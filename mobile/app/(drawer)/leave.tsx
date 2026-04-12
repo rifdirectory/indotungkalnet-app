@@ -17,7 +17,9 @@ import {
   Pressable
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useRouter } from 'expo-router';
+import { useRouter, useNavigation } from 'expo-router';
+import { DrawerActions } from '@react-navigation/native';
+import { DrawerNavigationProp } from '@react-navigation/drawer';
 import { 
   ChevronLeft, 
   Clock, 
@@ -32,9 +34,10 @@ import {
   CheckCircle2,
   XCircle,
   Pencil,
-  Trash2
+  Trash2,
+  Menu
 } from 'lucide-react-native';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '../../utils/storage';
 import axios from 'axios';
 
 import { API_URL } from '../../services/api';
@@ -58,6 +61,7 @@ const YEARS = [2024, 2025, 2026];
 
 export default function LeaveScreen() {
   const router = useRouter();
+  const navigation = useNavigation<DrawerNavigationProp<any>>();
   const flatListRef = useRef<FlatList>(null);
   
   const now = new Date();
@@ -313,8 +317,8 @@ export default function LeaveScreen() {
         style={{ paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 10 }}
         className="px-6 pb-4 bg-white border-b border-slate-100 flex-row items-center justify-between z-10"
       >
-        <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-            <ChevronLeft size={24} stroke="#334155" />
+        <TouchableOpacity onPress={() => navigation.dispatch(DrawerActions.openDrawer())} className="p-2 -ml-2">
+            <Menu size={24} stroke="#334155" />
         </TouchableOpacity>
         <Text className="text-slate-800 font-bold tracking-tight text-lg">Permohonan Izin</Text>
         <TouchableOpacity onPress={handleReset} className="p-2 -mr-2">
