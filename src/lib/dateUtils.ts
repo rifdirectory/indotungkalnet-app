@@ -18,6 +18,17 @@ export const getJakartaNow = () => {
   return `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}:${getPart('second')}`;
 };
 
+export const getJakartaToday = () => {
+    const options: Intl.DateTimeFormatOptions = {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    };
+    const formatter = new Intl.DateTimeFormat('en-CA', options);
+    return formatter.format(new Date()); // Returns YYYY-MM-DD
+};
+
 export const formatToJakartaDate = (date: string | Date) => {
   if (!date) return '-';
   const d = typeof date === 'string' ? new Date(date) : date;

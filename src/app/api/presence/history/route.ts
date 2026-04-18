@@ -91,6 +91,21 @@ export async function GET(req: Request) {
                 GROUP BY e.id, e.full_name, p.name, s.name, s.start_time, s.end_time
                 ORDER BY e.full_name ASC
             `, [start, start])) as any[];
+        } else if (mode === 'summary') {
+            // DASHBOARD MODE (Summary): Aggregated performance counts
+            history = (await query(`
+                SELECT 
+                    e.id as employee_id, e.full_name as employee_name, p.name as position_name,
+                    COUNT(DISTINCT CASE WHEN a.type = 'clock_in' THEN DATE(a.timestamp) END) as total_days,
+                    SUM(CASE WHEN a.type = 'clock_in' AND a.status = 'on_time' THEN 1 ELSE 0 END) as on_time_count,
+                    SUM(CASE WHEN a.type = 'clock_in' AND a.status = 'late' THEN 1 ELSE 0 END) as late_count
+                FROM employees e
+                LEFT JOIN positions p ON e.position_id = p.id
+                LEFT JOIN attendance a ON (e.id = a.employee_id AND DATE(a.timestamp) BETWEEN ? AND ?)
+                WHERE e.status = 'active'
+                GROUP BY e.id, e.full_name, p.name
+                ORDER BY e.full_name ASC
+            `, [start, end])) as any[];
         } else {
             // DASHBOARD MODE (Range): List of events
             history = (await query(`

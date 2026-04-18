@@ -60,6 +60,22 @@ app.get('/status', (req, res) => {
     });
 });
 
+app.post('/reset', async (req, res) => {
+    try {
+        console.log('[WA Gateway] Reset requested. Logging out...');
+        await client.logout();
+        connectionStatus = 'QR_REQUIRED';
+        qrCode = '';
+        res.json({ success: true, message: 'Gateway reset. QR Code will be generated shortly.' });
+    } catch (error) {
+        console.error('[WA Gateway] Reset failed:', error);
+        // If logout fails, it might already be disconnected
+        connectionStatus = 'QR_REQUIRED';
+        await client.initialize().catch(() => {});
+        res.json({ success: true, message: 'Gateway re-initialized.' });
+    }
+});
+
 app.get('/qr', (req, res) => {
     if (qrCode) {
         res.send(`<img src="${qrCode}" />`);
@@ -69,19 +85,34 @@ app.get('/qr', (req, res) => {
 });
 
 app.post('/send', async (req, res) => {
-    const { target, message } = req.json || req.body;
+    const { target, message } = req.body;
 
     if (connectionStatus !== 'READY') {
-        return res.status(503).json({ success: false, message: 'Gateway is not ready. Please check connection.' });
+        console.warn('[WA Gateway] Rejecting send: Status is', connectionStatus);
+        return res.status(503).json({ success: false, message: 'Gateway is not ready. Status: ' + connectionStatus });
+    }
+
+    if (!target || !message) {
+        return res.status(400).json({ success: false, message: 'Missing target or message' });
     }
 
     try {
-        const chatId = target.includes('@c.us') ? target : `${target}@c.us`;
+        const formattedTarget = target.replace(/[^\d]/g, '');
+        const chatId = formattedTarget.includes('@c.us') ? formattedTarget : `${formattedTarget}@c.us`;
+        
         await client.sendMessage(chatId, message);
-        console.log(`[WA Gateway] Message sent to ${target}`);
+        console.log(`[WA Gateway] Message sent successfully to ${formattedTarget}`);
         res.json({ success: true, message: 'Message sent' });
     } catch (error) {
-        console.error('[WA Gateway] Failed to send message:', error);
+        console.error('[WA Gateway] Send ERROR:', error.message);
+        
+        // Handle common session errors by attempting recovery
+        if (error.message.includes('detached') || error.message.includes('closed') || error.message.includes('Protocol error')) {
+            console.log('[WA Gateway] Critical session error detected. Attempting re-initialization...');
+            connectionStatus = 'QR_REQUIRED';
+            client.initialize().catch(() => {});
+        }
+
         res.status(500).json({ success: false, message: error.message });
     }
 });

@@ -81,11 +81,7 @@ export default function LeaveManagementPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700 }}>Permohonan Izin</Typography>
-        <Typography variant="body1" color="text.secondary">Tinjau dan setujui permohonan izin, sakit, atau cuti pegawai.</Typography>
-      </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
 
       {!mounted ? null : (
       <Card sx={{ borderRadius: 3, p: 2 }}>

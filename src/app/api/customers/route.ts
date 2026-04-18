@@ -1,14 +1,31 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { logActivity } from '@/lib/audit';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const rows = await db.query(`
+    const { searchParams } = new URL(request.url);
+    const exclude = searchParams.get('exclude');
+    const type = searchParams.get('type');
+
+    let query = `
       SELECT c.*, p.name as plan_name 
       FROM customers c 
       LEFT JOIN products p ON c.product_id = p.id 
-      ORDER BY c.join_date DESC
-    `);
+    `;
+    const params: any[] = [];
+
+    if (exclude) {
+      query += ` WHERE c.customer_type != ? `;
+      params.push(exclude);
+    } else if (type) {
+      query += ` WHERE c.customer_type = ? `;
+      params.push(type);
+    }
+
+    query += ` ORDER BY c.join_date DESC `;
+
+    const rows = await db.query(query, params);
     return NextResponse.json({ success: true, data: rows });
   } catch (error) {
     console.error('API Error:', error);
@@ -21,10 +38,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { 
       full_name, email, phone_number, address, package: pkg, status, customer_type, join_date, 
-      product_id, pppoe_username, pppoe_password 
+      product_id, pppoe_username, pppoe_password, user
     } = body;
 
-    await db.query(
+    const result: any = await db.query(
       `INSERT INTO customers (full_name, email, phone_number, address, package, product_id, status, join_date, customer_type, pppoe_username, pppoe_password) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -32,6 +49,17 @@ export async function POST(request: Request) {
         join_date || new Date().toISOString().split('T')[0], 
         customer_type, pppoe_username || null, pppoe_password || null
       ]
+    );
+
+    const customerId = result.insertId;
+
+    // Record Audit Log
+    await logActivity(
+      user || 'Admin',
+      'INSERT',
+      'Customers',
+      customerId ? `CUST-${customerId}` : null,
+      { full_name, package: pkg, status }
     );
 
     return NextResponse.json({ success: true, message: 'Customer created successfully' });

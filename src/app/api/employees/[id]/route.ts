@@ -7,12 +7,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const { id } = await params;
     const body = await request.json();
     const { 
-      full_name, position_id, phone, status, join_date, password
+      full_name, position_id, phone, status, join_date, password, attendance_type
     } = body;
 
     let query = `UPDATE employees SET 
-        full_name = ?, position_id = ?, phone = ?, status = ?, join_date = ?`;
-    let queryParams = [full_name, position_id, phone, status, join_date];
+        full_name = ?, position_id = ?, phone = ?, status = ?, join_date = ?, attendance_type = ?`;
+    let queryParams = [full_name, position_id, phone, status, join_date, attendance_type];
 
     // If password is provided, hash it and add to query
     if (password && password.trim() !== '') {

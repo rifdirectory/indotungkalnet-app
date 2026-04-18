@@ -64,7 +64,8 @@ export default function EmployeesPage() {
     phone: '',
     status: 'active',
     join_date: new Date().toISOString().split('T')[0],
-    password: ''
+    password: '',
+    attendance_type: 'office'
   });
 
   const fetchData = async () => {
@@ -89,7 +90,8 @@ export default function EmployeesPage() {
       phone: '', 
       status: 'active',
       join_date: new Date().toISOString().split('T')[0],
-      password: ''
+      password: '',
+      attendance_type: 'office'
     });
     setOpen(true);
   };
@@ -103,7 +105,8 @@ export default function EmployeesPage() {
       phone: emp.phone || '',
       status: emp.status,
       join_date: String(emp.join_date).split('T')[0],
-      password: ''
+      password: '',
+      attendance_type: emp.attendance_type || 'office'
     });
     setOpen(true);
   };
@@ -164,16 +167,8 @@ export default function EmployeesPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 5 }}>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 2 }}>
-                <BadgeIcon color="primary" /> Data Pegawai
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-                Manajemen data SDM dan teknisi ITNET.
-              </Typography>
-            </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+          <Stack direction="row" justifyContent="flex-end" sx={{ mb: 4 }}>
             <Button 
               variant="contained" 
               startIcon={<AddIcon />}
@@ -210,6 +205,11 @@ export default function EmployeesPage() {
                             {emp.full_name.charAt(0)}
                           </Avatar>
                           <Typography variant="body2" sx={{ fontWeight: 700 }}>{emp.full_name}</Typography>
+                          {emp.attendance_type === 'anywhere' && (
+                            <Tooltip title="Pegawai Fleksibel (Bisa Absen Dimana Saja)">
+                              <MobileIcon sx={{ fontSize: 16, color: 'info.main' }} />
+                            </Tooltip>
+                          )}
                         </Stack>
                       </TableCell>
                       <TableCell>
@@ -291,14 +291,26 @@ export default function EmployeesPage() {
                 <MenuItem value="inactive">Inactive</MenuItem>
               </TextField>
               <TextField
-                label="Tanggal Bergabung"
-                type="date"
+                select
+                label="Tipe Absensi"
                 fullWidth
-                InputLabelProps={{ shrink: true }}
-                value={formData.join_date}
-                onChange={(e) => setFormData({...formData, join_date: e.target.value})}
-              />
+                value={formData.attendance_type}
+                onChange={(e) => setFormData({...formData, attendance_type: e.target.value})}
+                helperText="Menentukan apakah wajib di kantor atau bisa dari mana saja"
+              >
+                <MenuItem value="office">Wajib di Kantor</MenuItem>
+                <MenuItem value="anywhere">Bisa Dimana Saja (Remote)</MenuItem>
+              </TextField>
             </Stack>
+
+            <TextField
+              label="Tanggal Bergabung"
+              type="date"
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+              value={formData.join_date}
+              onChange={(e) => setFormData({...formData, join_date: e.target.value})}
+            />
 
             <TextField
               label={editMode ? "Kata Sandi Baru (Kosongkan jika tidak diubah)" : "Kata Sandi Login"}

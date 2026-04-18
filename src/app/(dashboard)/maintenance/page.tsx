@@ -67,7 +67,8 @@ import {
   Coffee as CoffeeIcon,
   FiberManualRecord as FiberManualRecordIcon,
   Search as SearchIcon,
-  FilterList as FilterIcon
+  FilterList as FilterIcon,
+  Construction as ConstructionIcon
 } from "@mui/icons-material";
 
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
@@ -116,6 +117,8 @@ const TimelineItem = ({ label, time, active, isFirst, isLast }: any) => (
   </Stack>
 );
 
+import Portal from '@/components/Portal';
+
 export default function MaintenancePage() {
   const theme = useTheme();
   const [jobs, setJobs] = useState<any[]>([]);
@@ -132,8 +135,6 @@ export default function MaintenancePage() {
     assigned_to: [] as string[]
   });
 
-  // Action Menu States
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedJob, setSelectedJob] = useState<any>(null);
   
   // Filter States
@@ -144,7 +145,6 @@ export default function MaintenancePage() {
 
   // Logic States
   const [detailOpen, setDetailOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isEditingDesc, setIsEditingDesc] = useState(false);
   const [isEditingRepair, setIsEditingRepair] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -152,8 +152,19 @@ export default function MaintenancePage() {
     priority: '',
     description: '',
     repair_description: '',
-    assigned_to: [] as string[]
+    assigned_to: [] as string[],
+    fuel_cost: 0,
+    material_cost: 0,
+    other_cost: 0
   });
+
+  const [detailTab, setDetailTab] = useState(0);
+  const [ticketMaterials, setTicketMaterials] = useState<any[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+  const [selectedMaterial, setSelectedMaterial] = useState<any>(null);
+  const [materialQty, setMaterialQty] = useState(1);
+  const [materialSN, setMaterialSN] = useState('');
+  const [savingMaterial, setSavingMaterial] = useState(false);
 
   const categories = ["Pemasangan Baru", "Installasi Baru", "Perbaikan", "Perubahan Paket", "Pelanggan Berhenti", "Maintenace"];
 
@@ -206,7 +217,75 @@ export default function MaintenancePage() {
   useEffect(() => {
     fetchJobs();
     fetchTechnicians();
+    fetchInventoryItems();
   }, [range, statusFilter, customDates]);
+
+  const fetchTicketMaterials = async (ticketId: number) => {
+    try {
+      const res = await fetch(`/api/support/${ticketId}/materials`);
+      const data = await res.json();
+      if (data.success) {
+        setTicketMaterials(data.data);
+        const total = data.data.reduce((acc: number, m: any) => acc + (m.quantity * m.purchase_price), 0);
+        setEditForm(prev => ({ ...prev, material_cost: total }));
+      }
+    } catch (err) {}
+  };
+
+  const fetchInventoryItems = async () => {
+    try {
+      const res = await fetch('/api/inventory');
+      const data = await res.json();
+      if (data.success) setInventoryItems(data.data);
+    } catch (err) {}
+  };
+
+  const handleAddMaterial = async () => {
+    if (!selectedJob || !selectedMaterial || materialQty <= 0) return;
+    setSavingMaterial(true);
+    try {
+      const res = await fetch('/api/inventory/transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: selectedMaterial.id,
+          type: 'OUT',
+          quantity: materialQty,
+          ticket_id: selectedJob.id,
+          scenario: 'TICKET_USAGE',
+          sn: materialSN || null,
+          notes: `Pemakaian material pada maintenance #${selectedJob.id}${materialSN ? ` (SN: ${materialSN})` : ''}`,
+          user: 'Admin'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedMaterial(null);
+        setMaterialQty(1);
+        setMaterialSN('');
+        fetchTicketMaterials(selectedJob.id);
+        fetchInventoryItems();
+      }
+    } catch (err) {
+      console.error('Failed to add material:', err);
+    } finally {
+      setSavingMaterial(false);
+    }
+  };
+
+  const handleDeleteMaterial = async (logId: number) => {
+    if (!selectedJob || !window.confirm('Hapus material ini dan kembalikan ke stok?')) return;
+    try {
+      const res = await fetch(`/api/support/${selectedJob.id}/materials?log_id=${logId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        fetchTicketMaterials(selectedJob.id);
+        fetchInventoryItems();
+      }
+    } catch (err) {
+      console.error('Failed to delete material:', err);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!newJob.customer_id || !newJob.description) {
@@ -235,50 +314,25 @@ export default function MaintenancePage() {
     }
   };
 
-  // Kebab Menu Handlers
-  const handleMenuClick = (event: React.MouseEvent<HTMLButtonElement>, job: any) => {
-    setAnchorEl(event.currentTarget);
+  const handleRowClick = (job: any) => {
     setSelectedJob(job);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleOpenDetail = () => {
-    const job = selectedJob;
     const initialAssignees = job.assigned_ids ? job.assigned_ids.split(',') : [];
     setEditForm({
       category: job.category || 'Maintenace',
       priority: job.priority || 'Medium',
       description: job.description || '',
       repair_description: job.repair_description || '',
-      assigned_to: initialAssignees
+      assigned_to: initialAssignees,
+      fuel_cost: job.fuel_cost || 0,
+      material_cost: job.material_cost || 0,
+      other_cost: job.other_cost || 0
     });
+    setDetailTab(0);
+    fetchTicketMaterials(job.id);
+    fetchInventoryItems();
     setIsEditingDesc(false);
     setIsEditingRepair(false);
     setDetailOpen(true);
-    handleMenuClose();
-  };
-
-  const handleDeleteClick = () => {
-    setDeleteDialogOpen(true);
-    handleMenuClose();
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!selectedJob) return;
-    try {
-      const res = await fetch(`/api/support/${selectedJob.id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        setJobs(prev => prev.filter(j => j.id !== selectedJob.id));
-        setDeleteDialogOpen(false);
-        setSelectedJob(null);
-      }
-    } catch (err) {
-      console.error('Failed to delete job:', err);
-    }
   };
 
   const handleStatusUpdate = async (newStatus: string) => {
@@ -315,7 +369,10 @@ export default function MaintenancePage() {
           priority: editForm.priority,
           description: editForm.description,
           repair_description: editForm.repair_description,
-          assigned_to: editForm.assigned_to
+          assigned_to: editForm.assigned_to,
+          fuel_cost: editForm.fuel_cost,
+          material_cost: editForm.material_cost,
+          other_cost: editForm.other_cost
         })
       });
       const data = await res.json();
@@ -366,25 +423,20 @@ export default function MaintenancePage() {
   }, [jobs]);
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2} sx={{ mb: 5 }}>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.02em' }}>
-                Maintenance & Field Tech
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-                Jadwalkan instalasi dan perbaikan jaringan di lapangan.
-              </Typography>
-            </Box>
-            <Button 
-              variant="contained" 
-              startIcon={<AddIcon />}
-              onClick={() => setOpenDialog(true)}
-              sx={{ borderRadius: 3, fontWeight: 600 }}
-            >
-              Buat Job Order
-            </Button>
-          </Stack>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+      <Portal>
+        <Stack direction="row" justifyContent="flex-end">
+          <Button 
+            variant="contained" 
+            startIcon={<AddIcon />}
+            onClick={() => setOpenDialog(true)}
+            sx={{ borderRadius: 2, fontWeight: 700, px: 2, py: 0.5 }}
+            size="small"
+          >
+            Buat Job Order
+          </Button>
+        </Stack>
+      </Portal>
 
           <Grid container spacing={3} sx={{ mb: 5 }}>
             {[
@@ -483,12 +535,12 @@ export default function MaintenancePage() {
                     <TableCell>Lokasi</TableCell>
                     <TableCell>Priority</TableCell>
                     <TableCell>Status</TableCell>
-                    <TableCell align="right">Aksi</TableCell>
+                    <TableCell>Status</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {filteredJobs.length > 0 ? filteredJobs.map((job) => (
-                    <TableRow key={job.id} hover>
+                    <TableRow key={job.id} hover onClick={() => handleRowClick(job)} sx={{ cursor: 'pointer' }}>
                       <TableCell>
                         <Stack direction="row" spacing={1.5} alignItems="center">
                           <Avatar sx={{ width: 32, height: 32, fontSize: '0.75rem', bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.main', fontWeight: 800 }}>
@@ -553,15 +605,10 @@ export default function MaintenancePage() {
                           }} 
                         />
                       </TableCell>
-                      <TableCell align="right">
-                        <IconButton size="small" onClick={(e) => handleMenuClick(e, job)}>
-                          <MoreIcon fontSize="small" />
-                        </IconButton>
-                      </TableCell>
                     </TableRow>
                   )) : (
                     <TableRow>
-                      <TableCell colSpan={6} align="center" sx={{ py: 8 }}>
+                      <TableCell colSpan={5} align="center" sx={{ py: 8 }}>
                         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>
                           Tidak ada data yang ditemukan.
                         </Typography>
@@ -573,38 +620,6 @@ export default function MaintenancePage() {
             </TableContainer>
           </Card>
 
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-            PaperProps={{ sx: { borderRadius: 2, minWidth: 150, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' } }}
-          >
-            <MenuItem onClick={handleOpenDetail} sx={{ gap: 1.5, py: 1.2 }}>
-              <TaskIcon fontSize="small" color="primary" />
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>Detail Task</Typography>
-            </MenuItem>
-            <Divider />
-            <MenuItem onClick={handleDeleteClick} sx={{ gap: 1.5, py: 1.2, color: 'error.main' }}>
-              <DeleteIcon fontSize="small" />
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>Hapus Job</Typography>
-            </MenuItem>
-          </Menu>
-
-          <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-            <DialogTitle sx={{ fontWeight: 700 }}>Hapus Job Order?</DialogTitle>
-            <DialogContent>
-              <DialogContentText>
-                Apakah Anda yakin ingin menghapus job order ini? Tindakan ini tidak dapat dibatalkan.
-              </DialogContentText>
-            </DialogContent>
-            <DialogActions sx={{ p: 3 }}>
-              <Button onClick={() => setDeleteDialogOpen(false)}>Batal</Button>
-              <Button onClick={handleDeleteConfirm} variant="contained" color="error" sx={{ borderRadius: 2 }}>
-                Ya, Hapus
-              </Button>
-            </DialogActions>
-          </Dialog>
-
           <Dialog 
             open={detailOpen} 
             onClose={() => setDetailOpen(false)} 
@@ -614,104 +629,88 @@ export default function MaintenancePage() {
           >
             {selectedJob && (
               <>
-                <DialogTitle sx={{ p: 4, pb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.disabled', letterSpacing: 2, display: 'block', mb: 1 }}>
-                      #{selectedJob.id} &nbsp; JOB ORDER DETAILS & ASSIGNMENT
-                    </Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 900, color: 'text.primary', letterSpacing: '-0.02em', mb: 1 }}>
-                      {selectedJob.location}
-                    </Typography>
-                    <Stack direction="row" spacing={2} alignItems="center">
+                <Box sx={{ position: 'sticky', top: 0, zIndex: 10, bgcolor: 'white', borderBottom: '1px solid', borderColor: 'divider' }}>
+                  <DialogTitle sx={{ px: 3, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 900, color: 'text.primary', letterSpacing: '-0.02em' }}>
+                          {selectedJob.location}
+                        </Typography>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 500, color: 'text.disabled', letterSpacing: 1 }}>
+                          #{selectedJob.id}
+                        </Typography>
+                      </Box>
                       <Chip 
                         label={`TYPE: ${selectedJob.job_type}`} 
                         size="small" 
-                        sx={{ fontWeight: 700, bgcolor: alpha(theme.palette.success.main, 0.05), color: 'success.main', borderRadius: 1.5 }} 
+                        sx={{ fontWeight: 700, bgcolor: alpha(theme.palette.success.main, 0.05), color: 'success.main', height: 24 }} 
                       />
+                    </Box>
+
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <FormControl size="small" sx={{ minWidth: 140 }}>
+                        <Select
+                          value={editForm.category}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, category: e.target.value }))}
+                          disabled={selectedJob.status === 'Selesai'}
+                          sx={{ height: 32, fontSize: '0.75rem', fontWeight: 800, borderRadius: 1.5, bgcolor: '#f8fafc' }}
+                        >
+                          {categories.map(cat => <MenuItem key={cat} value={cat} sx={{ fontSize: '0.75rem' }}>{cat}</MenuItem>)}
+                        </Select>
+                      </FormControl>
+
+                      <FormControl size="small" sx={{ minWidth: 120 }}>
+                        <Select
+                          value={editForm.priority}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, priority: e.target.value }))}
+                          disabled={selectedJob.status === 'Selesai'}
+                          sx={{ 
+                            height: 32,
+                            fontSize: '0.75rem',
+                            fontWeight: 800, 
+                            borderRadius: 1.5, 
+                            bgcolor: editForm.priority === 'High' ? alpha(theme.palette.error.main, 0.05) : '#f8fafc',
+                            color: editForm.priority === 'High' ? 'error.main' : 'text.primary',
+                          }}
+                        >
+                          <MenuItem value="Low" sx={{ fontSize: '0.75rem' }}>Low</MenuItem>
+                          <MenuItem value="Medium" sx={{ fontSize: '0.75rem' }}>Medium</MenuItem>
+                          <MenuItem value="High" sx={{ fontSize: '0.75rem' }}>High</MenuItem>
+                        </Select>
+                      </FormControl>
+
+                      <IconButton size="small" onClick={() => setDetailOpen(false)} sx={{ bgcolor: '#f1f5f9' }}>
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
                     </Stack>
-                  </Box>
+                  </DialogTitle>
 
-                  <Stack direction="row" spacing={2} alignItems="center">
-                    <FormControl size="small" sx={{ minWidth: 140 }}>
-                      <Select
-                        value={editForm.category}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, category: e.target.value }))}
-                        disabled={selectedJob.status === 'Selesai'}
-                        sx={{ fontWeight: 800, borderRadius: 2, bgcolor: '#f8fafc', '& fieldset': { borderColor: 'divider' } }}
-                      >
-                        {categories.map(cat => <MenuItem key={cat} value={cat}>{cat}</MenuItem>)}
-                      </Select>
-                    </FormControl>
-
-                    <FormControl size="small" sx={{ minWidth: 120 }}>
-                      <Select
-                        value={editForm.priority}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, priority: e.target.value }))}
-                        disabled={selectedJob.status === 'Selesai'}
-                        sx={{ 
-                          fontWeight: 800, 
-                          borderRadius: 2, 
-                          bgcolor: editForm.priority === 'High' ? alpha(theme.palette.error.main, 0.05) : '#f8fafc',
-                          color: editForm.priority === 'High' ? 'error.main' : 'text.primary',
-                          '& fieldset': { borderColor: 'divider' }
-                        }}
-                      >
-                        <MenuItem value="Low">Low</MenuItem>
-                        <MenuItem value="Medium">Medium</MenuItem>
-                        <MenuItem value="High">High</MenuItem>
-                      </Select>
-                    </FormControl>
-
-                    {selectedJob.status === 'Sudah Diperbaiki' && (
-                      <Button 
-                        variant="contained" 
-                        color="success" 
-                        size="small"
-                        startIcon={<CheckIcon />}
-                        onClick={() => handleStatusUpdate('Selesai')}
-                        sx={{ p: 1.2, fontWeight: 900, borderRadius: 3, letterSpacing: 0.5 }}
-                      >
-                        VERIFIKASI & SELESAI
-                      </Button>
-                    )}
-
-                    {selectedJob.status === 'Open' && (
-                      <Button 
-                        variant="outlined" 
-                        color="error" 
-                        size="small"
-                        startIcon={<CloseIcon />}
-                        onClick={() => {
-                          if (window.confirm('Apakah Anda yakin ingin membatalkan job ini?')) {
-                            handleStatusUpdate('Dibatalkan');
-                          }
-                        }}
-                        sx={{ p: 1.2, fontWeight: 900, borderRadius: 3, letterSpacing: 0.5 }}
-                      >
-                        BATALKAN JOB
-                      </Button>
-                    )}
-
-                    <IconButton onClick={() => setDetailOpen(false)} sx={{ ml: 1 }}>
-                      <CloseIcon />
-                    </IconButton>
-                  </Stack>
-                </DialogTitle>
+                  <Tabs 
+                    value={detailTab} 
+                    onChange={(_, val) => setDetailTab(val)}
+                    sx={{
+                      px: 3,
+                      minHeight: 40,
+                      '& .MuiTab-root': { py: 1, minHeight: 40, fontWeight: 800, minWidth: 140, fontSize: '0.8rem' },
+                    }}
+                  >
+                    <Tab label="PENANGANAN" icon={<EngineeringIcon sx={{ fontSize: '1.1rem', mr: 1 }} />} iconPosition="start" />
+                    <Tab label="LOGISTIK & BIAYA" icon={<ConstructionIcon sx={{ fontSize: '1.1rem', mr: 1 }} />} iconPosition="start" />
+                    <Tab label="RIWAYAT & STATUS" icon={<HistoryIcon sx={{ fontSize: '1.1rem', mr: 1 }} />} iconPosition="start" />
+                  </Tabs>
+                </Box>
                 
-                <DialogContent sx={{ p: 0 }}>
-                  <Grid container sx={{ minHeight: 450 }}>
-                    {/* 1. PENUGASAN TIM */}
-                    <Grid size={{ xs: 12, md: 3.8 }} sx={{ p: 4 }}>
-                      <Box sx={{ mb: 4 }}>
-                        <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.disabled', letterSpacing: 2, textTransform: 'uppercase', display: 'block', mb: 2 }}>
-                          PENUGASAN TIM TEKNISI
-                        </Typography>
+                <DialogContent sx={{ p: 0, minHeight: 500, bgcolor: '#f8fafc' }}>
+                  {detailTab === 0 && (
+                    <Grid container>
+                      <Grid size={{ xs: 12, md: 4 }} sx={{ p: 4, borderRight: '1px solid', borderColor: 'divider' }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 900, mb: 3, letterSpacing: 1, color: 'text.secondary' }}>PENUGASAN TIM</Typography>
                         <Autocomplete
                           multiple
                           size="small"
                           options={technicians}
                           disabled={selectedJob.status === 'Selesai'}
-                          getOptionLabel={(option) => option.full_name || ''}
+                          getOptionLabel={(option) => option.id ? option.full_name : ''}
                           getOptionDisabled={(option) => option.current_status === 'Izin' || option.current_status === 'Off'}
                           isOptionEqualToValue={(option, value) => option.id === value.id}
                           value={employees.filter(e => (editForm.assigned_to || []).includes(e.id.toString()))}
@@ -719,250 +718,200 @@ export default function MaintenancePage() {
                           renderTags={() => null}
                           renderOption={(props, option, { selected }) => {
                             const { key, ...optionProps } = props as any;
-                            const isIzin = option.current_status === 'Izin';
                             return (
                               <li key={option.id} {...optionProps}>
-                                <Checkbox
-                                  icon={icon}
-                                  checkedIcon={checkedIcon}
-                                  style={{ marginRight: 8 }}
-                                  checked={selected}
-                                  disabled={isIzin || option.current_status === 'Off'}
-                                />
-                                <Box sx={{ flexGrow: 1, opacity: (isIzin || option.current_status === 'Off') ? 0.5 : 1 }}>
-                                  <Typography variant="body2" sx={{ fontWeight: (isIzin || option.current_status === 'Off') ? 400 : 600 }}>
-                                    {option.full_name} 
-                                    {isIzin && <Typography component="span" variant="caption" sx={{ ml: 1, color: 'error.main', fontWeight: 900 }}>(SEDANG IZIN)</Typography>}
-                                  </Typography>
-                                  <Typography variant="caption" color="text.secondary">
-                                    {option.position_name} • {option.current_status}
-                                  </Typography>
+                                <Checkbox checked={selected} size="small" />
+                                <Box sx={{ flexGrow: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{option.full_name}</Typography>
+                                  <Typography variant="caption" color="text.secondary">{option.position_name} • {option.current_status}</Typography>
                                 </Box>
                               </li>
                             );
                           }}
-                          renderInput={(params) => (
-                            <TextField 
-                              {...params} 
-                              placeholder="Cari & Pilih Teknisi..." 
-                              variant="outlined"
-                              sx={{ 
-                                '& .MuiOutlinedInput-root': { 
-                                  bgcolor: 'white', 
-                                  borderRadius: 3,
-                                  '& fieldset': { borderColor: 'divider' },
-                                  px: 2
-                                }
-                              }}
-                            />
-                          )}
+                          renderInput={(params) => <TextField {...params} placeholder="Tambah Teknisi..." sx={{ bgcolor: 'white' }} />}
                         />
-
-                        <Stack spacing={1} sx={{ mt: 2, minHeight: 120 }}>
-                          {editForm.assigned_to.length > 0 ? (
-                            editForm.assigned_to.map((empId) => {
-                              const emp = employees.find(e => e.id.toString() === empId);
-                              if (!emp) return null;
-                              return (
-                                <Paper 
-                                  key={emp.id}
-                                  elevation={0}
-                                  sx={{ 
-                                    p: 1.5, 
-                                    display: 'flex', 
-                                    alignItems: 'center', 
-                                    justifyContent: 'space-between',
-                                    bgcolor: alpha(theme.palette.primary.main, 0.03),
-                                    borderRadius: 2.5,
-                                    border: '1px solid',
-                                    borderColor: alpha(theme.palette.primary.main, 0.08)
-                                  }}
-                                >
-                                  <Stack direction="row" spacing={1.5} alignItems="center">
-                                    <Avatar 
-                                      sx={{ 
-                                        width: 32, 
-                                        height: 32, 
-                                        fontSize: '0.8rem', 
-                                        fontWeight: 900,
-                                        bgcolor: 'primary.main'
-                                      }}
-                                    >
-                                      {emp.full_name.charAt(0)}
-                                    </Avatar>
-                                    <Box>
-                                      <Typography variant="body2" sx={{ fontWeight: 900, color: 'text.primary' }}>
-                                        {emp.full_name}
-                                      </Typography>
-                                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                                        {emp.position_name || 'Teknisi'}
-                                      </Typography>
-                                    </Box>
-                                  </Stack>
-                                  {selectedJob.status !== 'Selesai' && (
-                                    <IconButton 
-                                      size="small" 
-                                      color="error" 
-                                      onClick={() => setEditForm(prev => ({ 
-                                        ...prev, 
-                                        assigned_to: prev.assigned_to.filter(id => id !== empId) 
-                                      }))}
-                                    >
-                                      <CloseIcon sx={{ fontSize: '1rem' }} />
-                                    </IconButton>
-                                  )}
-                                </Paper>
-                              );
-                            })
-                          ) : (
-                            <Box sx={{ py: 4, textAlign: 'center', border: '2px dashed', borderColor: 'divider', borderRadius: 3, color: 'text.disabled' }}>
-                              <Typography variant="body2" sx={{ fontWeight: 600 }}>Belum ada teknisi ditugaskan</Typography>
-                            </Box>
-                          )}
+                        <Stack spacing={1.5} sx={{ mt: 3 }}>
+                          {editForm.assigned_to.map((empId) => {
+                            const emp = employees.find(e => e.id.toString() === empId);
+                            if (!emp) return null;
+                            return (
+                              <Paper key={emp.id} elevation={0} sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'white', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                                <Stack direction="row" spacing={1.5} alignItems="center">
+                                  <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: '0.8rem', fontWeight: 900 }}>
+                                    {emp.full_name[0]}
+                                  </Avatar>
+                                  <Box>
+                                    <Typography variant="body2" sx={{ fontWeight: 800 }}>{emp.full_name}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{emp.position_name}</Typography>
+                                  </Box>
+                                </Stack>
+                                {selectedJob.status !== 'Selesai' && (
+                                  <IconButton size="small" color="error" onClick={() => setEditForm(prev => ({ ...prev, assigned_to: prev.assigned_to.filter(id => id !== empId) }))}>
+                                    <CloseIcon fontSize="small" />
+                                  </IconButton>
+                                )}
+                              </Paper>
+                            );
+                          })}
                         </Stack>
-                      </Box>
-                    </Grid>
-
-                    {/* 2. DESKRIPSI PEKERJAAN */}
-                    <Grid size={{ xs: 12, md: 5.2 }} sx={{ p: 4, borderLeft: '1px solid', borderColor: 'divider', bgcolor: '#fcfdfe' }}>
-                      <Stack spacing={3}>
-                        <Box>
-                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                            <Box sx={{ width: 28, height: 28, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'primary.main' }}>
-                              <MessageIcon sx={{ fontSize: '1rem' }} />
-                            </Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 900, color: 'text.primary', textTransform: 'uppercase' }}>
-                              DESKRIPSI TUGAS
-                            </Typography>
-                          </Stack>
-                          
-                          {isEditingDesc ? (
-                            <TextField
-                              fullWidth multiline rows={6}
-                              value={editForm.description}
-                              onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                              autoFocus
-                              sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white', borderRadius: 4, p: 2 } }}
-                            />
-                          ) : (
-                            <Paper 
-                              elevation={0}
-                              sx={{ 
-                                p: 2.5, bgcolor: 'white', borderRadius: 4, border: '1px solid', borderColor: 'divider', position: 'relative', minHeight: 180,
-                                '&:hover': selectedJob.status !== 'Selesai' ? { bgcolor: 'white', borderColor: 'primary.main', cursor: 'pointer' } : {}
-                              }}
-                              onClick={() => selectedJob.status !== 'Selesai' && setIsEditingDesc(true)}
-                            >
-                              {selectedJob.status !== 'Selesai' && (
-                                <IconButton size="small" sx={{ position: 'absolute', top: 12, right: 12 }}>
-                                  <EditIcon sx={{ fontSize: '0.9rem' }} />
-                                </IconButton>
-                              )}
-                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: 'text.primary', lineHeight: 1.6, fontWeight: 500 }}>
-                                {editForm.description || "Klik untuk menambah deskripsi..."}
-                              </Typography>
-                            </Paper>
-                          )}
-                        </Box>
-
-                        <Box>
-                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
-                            <Box sx={{ width: 28, height: 28, borderRadius: 2, bgcolor: alpha(theme.palette.success.main, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'success.main' }}>
-                              <TaskIcon sx={{ fontSize: '1rem' }} />
-                            </Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 900, color: 'text.primary', textTransform: 'uppercase' }}>
-                              KETERANGAN PENYELESAIAN
-                            </Typography>
-                          </Stack>
-                          
-                          {isEditingRepair ? (
-                            <TextField
-                              fullWidth multiline rows={10}
-                              value={editForm.repair_description}
-                              onChange={(e) => setEditForm(prev => ({ ...prev, repair_description: e.target.value }))}
-                              autoFocus
-                              sx={{ '& .MuiOutlinedInput-root': { bgcolor: 'white', borderRadius: 4, p: 2 } }}
-                            />
-                          ) : (
-                            <Paper 
-                              elevation={0}
-                              sx={{ 
-                                p: 2.5, bgcolor: alpha(theme.palette.success.main, 0.02), borderRadius: 4, border: '1px solid', borderColor: 'divider', position: 'relative', minHeight: 250,
-                                '&:hover': selectedJob.status !== 'Selesai' ? { bgcolor: 'white', borderColor: theme.palette.success.main, cursor: 'pointer' } : {}
-                              }}
-                              onClick={() => selectedJob.status !== 'Selesai' && setIsEditingRepair(true)}
-                            >
-                              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: editForm.repair_description ? 'text.primary' : 'text.disabled', lineHeight: 1.6, fontWeight: 500 }}>
-                                {editForm.repair_description || "Klik untuk menuliskan keterangan penyelesaian..."}
-                              </Typography>
-                            </Paper>
-                          )}
-                        </Box>
-                      </Stack>
-                    </Grid>
-
-                    {/* 3. DURASI & TIMELINE */}
-                    <Grid size={{ xs: 12, md: 3 }} sx={{ p: 4, borderLeft: '1px solid', borderColor: 'divider' }}>
-                      <Box sx={{ mb: 4 }}>
-                        <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.disabled', letterSpacing: 2, textTransform: 'uppercase', display: 'block', mb: 3 }}>
-                          DURASI PEKERJAAN
-                        </Typography>
-                        <Stack direction="row" alignItems="center" spacing={2} sx={{ bgcolor: alpha(theme.palette.success.main, 0.06), p: 2, borderRadius: 3, border: '1px solid', borderColor: alpha(theme.palette.success.main, 0.1) }}>
-                          <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'success.main', color: 'white', display: 'flex' }}>
-                            <ClockIcon sx={{ fontSize: '1.2rem' }} />
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 8 }} sx={{ p: 4 }}>
+                        <Stack spacing={4}>
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 900, mb: 1, color: 'text.secondary' }}>DESKRIPSI TUGAS</Typography>
+                            {isEditingDesc ? (
+                              <TextField fullWidth multiline rows={5} value={editForm.description} onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))} autoFocus sx={{ bgcolor: 'white' }} />
+                            ) : (
+                              <Paper onClick={() => selectedJob.status !== 'Selesai' && setIsEditingDesc(true)} sx={{ p: 2, minHeight: 120, bgcolor: 'white', border: '1px solid', borderColor: 'divider', cursor: 'pointer', '&:hover': { borderColor: 'primary.main' } }}>
+                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{editForm.description}</Typography>
+                              </Paper>
+                            )}
                           </Box>
                           <Box>
-                            <Typography variant="caption" sx={{ fontWeight: 800, color: 'success.main', display: 'block' }}>TIMER AKTIF</Typography>
-                            <Typography sx={{ fontWeight: 900, fontSize: '1.25rem', color: 'success.dark' }}>
-                              <LiveTimer 
-                                createdAt={selectedJob.created_at}
-                                createdTimeStr={selectedJob.created_time_str}
-                                status={selectedJob.status}
-                                finishedAt={selectedJob.finished_at}
-                              />
-                            </Typography>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 900, mb: 1, color: 'text.secondary' }}>KETERANGAN PENYELESAIAN</Typography>
+                            {isEditingRepair ? (
+                              <TextField fullWidth multiline rows={5} value={editForm.repair_description} onChange={(e) => setEditForm(prev => ({ ...prev, repair_description: e.target.value }))} autoFocus sx={{ bgcolor: 'white' }} />
+                            ) : (
+                              <Paper onClick={() => selectedJob.status !== 'Selesai' && setIsEditingRepair(true)} sx={{ p: 2, minHeight: 120, bgcolor: alpha(theme.palette.success.main, 0.02), border: '1px solid', borderColor: 'divider', cursor: 'pointer', '&:hover': { borderColor: 'success.main' } }}>
+                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: editForm.repair_description ? 'text.primary' : 'text.disabled' }}>
+                                  {editForm.repair_description || "Tuliskan laporan penyelesaian di sini..."}
+                                </Typography>
+                              </Paper>
+                            )}
                           </Box>
                         </Stack>
-                      </Box>
-
-                      <Typography variant="caption" sx={{ fontWeight: 900, color: 'text.disabled', letterSpacing: 2, textTransform: 'uppercase', display: 'block', mb: 3 }}>
-                        TIMELINE STATUS
-                      </Typography>
-                      <Stack spacing={0}>
-                        <TimelineItem label="TUGAS DIBUAT" time={formatWIB(selectedJob.created_at)} active isFirst />
-                        <TimelineItem label="OTW KE LOKASI" time={formatWIB(selectedJob.otw_at)} active={!!selectedJob.otw_at} />
-                        <TimelineItem label="MULAI DIKERJAKAN" time={formatWIB(selectedJob.working_at)} active={!!selectedJob.working_at} />
-                        <TimelineItem label="SUDAH SELESAI" time={formatWIB(selectedJob.resolved_at)} active={!!selectedJob.resolved_at} />
-                        <TimelineItem label="CLOSED" time={formatWIB(selectedJob.finished_at)} active={!!selectedJob.finished_at} isLast />
-                      </Stack>
+                      </Grid>
                     </Grid>
-                  </Grid>
+                  )}
+
+                  {detailTab === 1 && (
+                    <Grid container>
+                      <Grid size={{ xs: 12, md: 8 }} sx={{ p: 4, borderRight: '1px solid', borderColor: 'divider' }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 900, mb: 3, color: 'text.secondary' }}>BAHAN / MATERIAL TERPAKAI</Typography>
+                        {selectedJob.status !== 'Selesai' && (
+                          <Paper sx={{ p: 2, mb: 3, borderRadius: 3, display: 'flex', gap: 2, alignItems: 'center' }}>
+                            <Autocomplete
+                              sx={{ flexGrow: 1 }}
+                              size="small"
+                              options={inventoryItems.filter(i => i.stock > 0)}
+                              getOptionLabel={(option) => `${option.name} (Stok: ${option.stock} ${option.unit})`}
+                              value={selectedMaterial}
+                              onChange={(_, val) => setSelectedMaterial(val)}
+                              renderInput={(params) => <TextField {...params} label="Cari Barang..." />}
+                            />
+                            <TextField size="small" sx={{ width: 100 }} type="number" label="Qty" value={materialQty} onChange={(e) => setMaterialQty(Number(e.target.value))} />
+                            
+                            { (selectedMaterial?.track_sn || selectedMaterial?.category_has_sn) && (
+                              <TextField 
+                                size="small" 
+                                label="Serial Number (SN)" 
+                                value={materialSN} 
+                                onChange={(e) => setMaterialSN(e.target.value)}
+                                autoFocus
+                                placeholder="Scan atau ketik SN..."
+                                sx={{ minWidth: 200 }}
+                              />
+                            )}
+
+                            <Button variant="contained" onClick={handleAddMaterial} disabled={!selectedMaterial || savingMaterial}>Tambah</Button>
+                          </Paper>
+                        )}
+                        <Stack spacing={1.5}>
+                          {ticketMaterials.map(m => (
+                            <Paper key={m.id} elevation={0} sx={{ p: 2, display: 'flex', justifyContent: 'space-between', bgcolor: 'white', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+                              <Box>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 900 }}>{m.item_name}</Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {m.quantity} {m.unit} 
+                                  {m.sn && <span style={{ color: theme.palette.primary.main, fontWeight: 800, marginLeft: '8px' }}>• SN: {m.sn}</span>}
+                                  {" • "}Biaya Modal: {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(m.purchase_price * m.quantity)}
+                                </Typography>
+                              </Box>
+                              {selectedJob.status !== 'Selesai' && (
+                                <IconButton size="small" color="error" onClick={() => handleDeleteMaterial(m.id)}>
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              )}
+                            </Paper>
+                          ))}
+                        </Stack>
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 4 }} sx={{ p: 4 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 900, mb: 3, color: 'text.secondary' }}>BIAYA OPERASIONAL</Typography>
+                        <Stack spacing={3}>
+                          <TextField fullWidth size="small" label="Bensin / BBM" type="number" value={editForm.fuel_cost} onChange={(e) => setEditForm(prev => ({ ...prev, fuel_cost: Number(e.target.value) }))} sx={{ bgcolor: 'white' }} />
+                          <TextField fullWidth size="small" label="Lain-lain / Makan" type="number" value={editForm.other_cost} onChange={(e) => setEditForm(prev => ({ ...prev, other_cost: Number(e.target.value) }))} sx={{ bgcolor: 'white' }} />
+                          <Paper sx={{ p: 3, bgcolor: 'primary.main', color: 'white', borderRadius: 3 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 800, opacity: 0.8 }}>TOTAL ESTIMASI BIAYA</Typography>
+                            <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(editForm.fuel_cost || 0) + Number(editForm.other_cost || 0) + Number(editForm.material_cost || 0))}
+                            </Typography>
+                          </Paper>
+                        </Stack>
+                      </Grid>
+                    </Grid>
+                  )}
+
+                  {detailTab === 2 && (
+                    <Grid container>
+                      <Grid size={{ xs: 12, md: 5 }} sx={{ p: 4, borderRight: '1px solid', borderColor: 'divider' }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 900, mb: 3, color: 'text.secondary' }}>TIMELINE AKTIVITAS</Typography>
+                        <Stack spacing={0.5}>
+                          <TimelineItem label="TUGAS DIBUAT" time={formatWIB(selectedJob.created_at)} active isFirst />
+                          <TimelineItem label="OTW KE LOKASI" time={formatWIB(selectedJob.otw_at)} active={!!selectedJob.otw_at} />
+                          <TimelineItem label="MULAI DIKERJAKAN" time={formatWIB(selectedJob.working_at)} active={!!selectedJob.working_at} />
+                          <TimelineItem label="SUDAH SELESAI" time={formatWIB(selectedJob.resolved_at)} active={!!selectedJob.resolved_at} />
+                          <TimelineItem label="CLOSED" time={formatWIB(selectedJob.finished_at)} active={!!selectedJob.finished_at} isLast />
+                        </Stack>
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 7 }} sx={{ p: 4 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 900, mb: 3, color: 'text.secondary' }}>RINGKASAN STATUS</Typography>
+                        <Box sx={{ p: 4, bgcolor: alpha(theme.palette.success.main, 0.05), border: '1px solid', borderColor: alpha(theme.palette.success.main, 0.1), borderRadius: 4, textAlign: 'center' }}>
+                          <ClockIcon sx={{ fontSize: '3rem', color: 'success.main', mb: 2 }} />
+                          <Typography variant="h4" sx={{ fontWeight: 900, color: 'success.dark' }}>
+                            <LiveTimer 
+                              createdAt={selectedJob.created_at}
+                              createdTimeStr={selectedJob.created_time_str}
+                              status={selectedJob.status}
+                              finishedAt={selectedJob.finished_at}
+                            />
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: 'success.main', letterSpacing: 1 }}>DURASI PENANGANAN AKTIF</Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  )}
                 </DialogContent>
                 
-                <Box sx={{ p: 2, px: 4, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'white', display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                <DialogActions sx={{ p: 2, px: 4, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'white', gap: 2 }}>
                   {isDirty && (
-                    <Button 
-                      variant="contained" 
-                      color="primary"
-                      onClick={handleSaveAll}
-                      disabled={loading}
-                      startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />}
-                      sx={{ height: 42, px: 4, borderRadius: 2.5, fontWeight: 900 }}
-                    >
+                    <Button variant="contained" onClick={handleSaveAll} disabled={loading} startIcon={loading ? <CircularProgress size={20} /> : <CheckIcon />} sx={{ height: 45, px: 4, borderRadius: 2.5, fontWeight: 900 }}>
                       SIMPAN PERUBAHAN
                     </Button>
                   )}
-                                   {selectedJob.status !== 'Selesai' && selectedJob.status !== 'Dibatalkan' && (
-                    <Stack direction="row" spacing={2}>
+                  
+                  {(selectedJob.status !== 'Selesai' && selectedJob.status !== 'Dibatalkan') && (
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+                      <Button 
+                        variant="contained"
+                        color="error"
+                        onClick={() => {
+                          if(window.confirm('Batalkan job order ini? Pastikan Anda membatalkan material jika ada yang sudah di-scan.')){
+                            handleStatusUpdate('Dibatalkan');
+                          }
+                        }}
+                        sx={{ height: 45, px: 3, borderRadius: 2.5, fontWeight: 900 }}
+                      >
+                        BATALKAN JOB
+                      </Button>
                       <Button 
                         variant="outlined"
                         onClick={() => handleStatusUpdate(
                           selectedJob.status === 'Open' ? 'OTW' :
                           selectedJob.status === 'OTW' ? 'Sedang Dikerjakan' :
-                          selectedJob.status === 'Sedang Dikerjakan' ? 'Resolved' :
-                          'Selesai'
+                          selectedJob.status === 'Sedang Dikerjakan' ? 'Resolved' : 'Selesai'
                         )}
-                        sx={{ height: 42, px: 4, borderRadius: 2.5, fontWeight: 900, borderColor: 'divider' }}
+                        sx={{ height: 45, px: 4, borderRadius: 2.5, fontWeight: 900 }}
                       >
                         {
                           selectedJob.status === 'Open' ? 'OTW KE LOKASI' :
@@ -973,7 +922,7 @@ export default function MaintenancePage() {
                       </Button>
                     </Stack>
                   )}
-                </Box>
+                </DialogActions>
               </>
             )}
           </Dialog>

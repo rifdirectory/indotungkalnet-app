@@ -10,7 +10,10 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { category, priority, status, description, repair_description, assigned_to } = body;
+    const { 
+      category, priority, status, description, repair_description, assigned_to,
+      fuel_cost, material_cost, other_cost
+    } = body;
 
     // Fetch current ticket and customer info for comparison and notification
     const [currentTicket]: any = await db.query('SELECT status, customer_name FROM support_tickets WHERE id = ?', [id]);
@@ -22,7 +25,10 @@ export async function PUT(
 
     let timestampField = '';
     const nowStr = getJakartaNow();
-    const queryParams: any[] = [category, priority, status, description, repair_description];
+    const queryParams: any[] = [
+      category, priority, status, description, repair_description,
+      fuel_cost || 0, material_cost || 0, other_cost || 0
+    ];
     
     if (status === 'OTW') timestampField = ', otw_at = ?';
     else if (status === 'Sedang Dikerjakan') timestampField = ', working_at = ?';
@@ -34,7 +40,8 @@ export async function PUT(
 
     const query = `
       UPDATE support_tickets 
-      SET category = ?, priority = ?, status = ?, description = ?, repair_description = ?${timestampField} 
+      SET category = ?, priority = ?, status = ?, description = ?, repair_description = ?,
+          fuel_cost = ?, material_cost = ?, other_cost = ?${timestampField} 
       WHERE id = ?
     `;
 

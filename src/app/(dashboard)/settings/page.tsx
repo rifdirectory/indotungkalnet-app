@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Typography, Stack, Button, Card, Grid, TextField, 
   InputAdornment, Divider, Alert, Snackbar, CircularProgress, alpha,
-  ToggleButton, ToggleButtonGroup
+  ToggleButton, ToggleButtonGroup,
+  useTheme
 } from "@mui/material";
 import { 
   Settings as SettingsIcon, 
@@ -12,10 +13,14 @@ import {
   Save as SaveIcon,
   Map as MapIcon,
   Refresh as RefreshIcon,
-  NotificationsActive as NotifIcon
+  NotificationsActive as NotifIcon,
+  Security as SecurityIcon,
+  Search as SearchIcon
 } from "@mui/icons-material";
+import Link from 'next/link';
 
 export default function SettingsPage() {
+  const theme = useTheme();
   const [settings, setSettings] = useState({
     office_latitude: '',
     office_longitude: '',
@@ -120,17 +125,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 5 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <SettingsIcon color="primary" /> Pengaturan Sistem
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            Kelola konfigurasi dasar aplikasi dan parameter absensi.
-          </Typography>
-        </Box>
-      </Stack>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
 
       <Grid container spacing={4}>
         <Grid size={{ xs: 12, md: 7 }}>
@@ -257,24 +252,36 @@ export default function SettingsPage() {
                     </Alert>
                   )}
 
-                  {waStatus.status === 'QR_REQUIRED' && waStatus.qr && (
+                  {waStatus.status === 'QR_REQUIRED' && (
                     <Box sx={{ mb: 2 }}>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        Silahkan scan QR Code ini dengan WhatsApp Bapak:
-                      </Typography>
-                      <Box 
-                        component="img" 
-                        src={waStatus.qr} 
-                        sx={{ 
-                          width: 240, 
-                          height: 240, 
-                          mx: 'auto', 
-                          display: 'block', 
-                          borderRadius: 2,
-                          border: '4px solid #fff',
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                        }} 
-                      />
+                      {waStatus.qr ? (
+                        <>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                            Silahkan scan QR Code ini dengan WhatsApp Bapak:
+                          </Typography>
+                          <Box 
+                            component="img" 
+                            src={waStatus.qr} 
+                            sx={{ 
+                              width: 240, 
+                              height: 240, 
+                              mx: 'auto', 
+                              display: 'block', 
+                              borderRadius: 2,
+                              border: '4px solid #fff',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                            }} 
+                          />
+                        </>
+                      ) : (
+                        <Box sx={{ py: 4 }}>
+                          <CircularProgress size={40} sx={{ mb: 2 }} />
+                          <Typography variant="body2" color="text.secondary">
+                            Sedang menyiapkan QR Code baru... <br/>
+                            Harap tunggu sebentar.
+                          </Typography>
+                        </Box>
+                      )}
                     </Box>
                   )}
 
@@ -283,6 +290,28 @@ export default function SettingsPage() {
                       WhatsApp Terhubung! Sistem siap mengirim notifikasi.
                     </Alert>
                   )}
+
+                  <Box sx={{ mt: 2 }}>
+                    <Button 
+                        size="small" 
+                        variant="outlined" 
+                        color="error" 
+                        startIcon={<RefreshIcon />}
+                        onClick={async () => {
+                            if(confirm('Keluarkan sesi WhatsApp saat ini dan scan ulang QR?')) {
+                                try {
+                                    await fetch('http://localhost:8080/reset', { method: 'POST' });
+                                    setMessage({ type: 'success', text: 'Reset berhasil. Silahkan tunggu QR Code baru.', open: true });
+                                } catch (e) {
+                                    setMessage({ type: 'error', text: 'Gagal reset gateway.', open: true });
+                                }
+                            }
+                        }}
+                        sx={{ borderRadius: 2, fontWeight: 700 }}
+                    >
+                        Reset & Hubungkan Ulang (Rescan QR)
+                    </Button>
+                  </Box>
                 </Box>
               )}
 
@@ -353,6 +382,36 @@ export default function SettingsPage() {
 
         <Grid size={{ xs: 12, md: 5 }}>
           <Stack spacing={4}>
+            <Card sx={{ 
+              p: 4, 
+              borderRadius: 4, 
+              bgcolor: alpha(theme.palette.primary.main, 0.05), 
+              border: '1px solid', 
+              borderColor: alpha(theme.palette.primary.main, 0.1),
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              height: '100%'
+            }}>
+              <Box>
+                <Typography variant="h6" sx={{ mb: 1, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <SecurityIcon color="primary" /> Keamanan & Audit
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Pantau riwayat aktivitas administratif, transaksi, dan perubahan data di seluruh sistem untuk akuntabilitas staf.
+                </Typography>
+              </Box>
+              <Button 
+                component={Link} 
+                href="/settings/audit-logs" 
+                variant="contained" 
+                fullWidth
+                sx={{ borderRadius: 2, py: 1.5, fontWeight: 800, textTransform: 'none' }}
+              >
+                Buka Log Aktivitas
+              </Button>
+            </Card>
+
             <Card sx={{ p: 4, borderRadius: 4, bgcolor: alpha('#0a84ff', 0.03), border: '1px dashed', borderColor: alpha('#0a84ff', 0.2) }}>
               <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>Penyimpanan Foto</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>

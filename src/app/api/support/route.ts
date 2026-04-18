@@ -22,7 +22,7 @@ export async function GET(req: Request) {
       LEFT JOIN employees e ON ta.employee_id = e.id
     `;
     let params: any[] = [];
-    let whereClauses = [];
+    let whereClauses = ["t.category NOT IN ('Maintenace', 'Installasi Baru')"];
 
     const nowStr = getJakartaNow();
     const [jakartaDate] = nowStr.split(' ');
@@ -64,12 +64,16 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { customer_id, category, subject, priority, difficulty, description, repair_description, phone_number, assigned_to } = body;
+    const { 
+      customer_id, category, subject, priority, difficulty, description, 
+      repair_description, phone_number, assigned_to,
+      fuel_cost, material_cost, other_cost
+    } = body;
 
     let customer_name = 'Unknown Customer';
     let db_customer_id = customer_id;
 
-    if (category === 'Maintenace' || category === 'Installasi Baru') {
+    if (category === 'Maintenace' || category === 'Installasi Baru' || category === 'Pemasangan Baru') {
       customer_name = customer_id; 
       db_customer_id = null;
     } else {
@@ -81,8 +85,8 @@ export async function POST(req: Request) {
     const derivedSubject = description ? (description.length > 80 ? description.substring(0, 80) + '...' : description) : 'No Subject';
     
     const result: any = await db.query(
-      'INSERT INTO support_tickets (customer_id, phone_number, customer_name, category, subject, priority, difficulty, status, description, repair_description, created_time_str, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [db_customer_id, phone_number || null, customer_name, category, derivedSubject, priority || 'Medium', difficulty || 'Low', 'Open', description, repair_description || null, nowStr, nowStr]
+      'INSERT INTO support_tickets (customer_id, phone_number, customer_name, category, subject, priority, difficulty, status, description, repair_description, created_time_str, created_at, fuel_cost, material_cost, other_cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [db_customer_id, phone_number || null, customer_name, category, derivedSubject, priority || 'Medium', difficulty || 'Low', 'Open', description, repair_description || null, nowStr, nowStr, fuel_cost || 0, material_cost || 0, other_cost || 0]
     );
     const ticketId = result.insertId;
 

@@ -5,7 +5,7 @@ import {
   Box, Typography, Stack, Button, Card, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, alpha, useTheme, Avatar, 
   Chip, TextField, MenuItem, Divider, Grid, IconButton, Tooltip,
-  Dialog, DialogTitle, DialogContent, DialogActions
+  Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress
 } from "@mui/material";
 import { 
   FactCheck as PresenceIcon, 
@@ -44,6 +44,7 @@ export default function HistoryPage() {
   const [openDetailModal, setOpenDetailModal] = useState(false);
   const [selectedLog, setSelectedLog] = useState<any>(null);
   const [modalView, setModalView] = useState<'photo' | 'location'>('photo');
+  const [exporting, setExporting] = useState(false);
 
   const months = [
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -83,6 +84,19 @@ export default function HistoryPage() {
   useEffect(() => {
     fetchData();
   }, [dateRange, viewMode]);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const url = `/api/presence/export?start=${dateRange.start}&end=${dateRange.end}&mode=${viewMode}`;
+      window.location.href = url;
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Maaf, ekspor data gagal.');
+    } finally {
+      setTimeout(() => setExporting(false), 2000);
+    }
+  };
 
   const handleFilterChange = (val: string) => {
     setFilter(val);
@@ -211,22 +225,16 @@ export default function HistoryPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 5 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <PresenceIcon color="primary" /> Data Presensi
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            Audit log kehadiran pegawai ITNET secara real-time.
-          </Typography>
-        </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+      <Stack direction="row" justifyContent="flex-end" spacing={2} alignItems="center" sx={{ mb: 4 }}>
         <Button 
           variant="outlined" 
-          startIcon={<ExportIcon />}
+          startIcon={exporting ? <CircularProgress size={20} /> : <ExportIcon />}
+          onClick={handleExport}
+          disabled={exporting}
           sx={{ borderRadius: 3, px: 3, py: 1.2, fontWeight: 700 }}
         >
-          Export Excel
+          {exporting ? 'Exporting...' : 'Export Excel'}
         </Button>
       </Stack>
 

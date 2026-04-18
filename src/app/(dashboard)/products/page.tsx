@@ -167,18 +167,8 @@ function ProductsContent() {
   };
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 5 }}>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 2 }}>
-                <ProductIcon color="primary" /> {getPageTitle()}
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-                {categoryFilter 
-                  ? `Daftar paket internet khusus kategori ${categoryFilter}.`
-                  : "Kelola seluruh paket layanan internet ITNET (Broadband, Enterprise, Mitra, Operator)."}
-              </Typography>
-            </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+          <Stack direction="row" justifyContent="flex-end" sx={{ mb: 3 }}>
             <Button 
               variant="contained" 
               startIcon={<AddIcon />}

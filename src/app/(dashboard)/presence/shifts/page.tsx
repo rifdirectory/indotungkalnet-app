@@ -83,16 +83,8 @@ export default function ShiftsPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 5 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <AccessTimeIcon color="primary" /> Aturan Shift
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            Definisikan waktu kerja dan shift untuk seluruh pegawai.
-          </Typography>
-        </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 4 }}>
         <Button 
           variant="contained" 
           startIcon={<AddIcon />}

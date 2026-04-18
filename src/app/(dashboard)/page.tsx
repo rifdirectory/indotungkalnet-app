@@ -95,17 +95,7 @@ export default function Dashboard() {
   }, []);
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2} sx={{ mb: 5 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.02em' }}>
-            Dashboard ITNET
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            Selamat datang kembali di pusat kendali ISP.
-          </Typography>
-        </Box>
-      </Stack>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
 
       <Grid container spacing={3} sx={{ mb: 5 }}>
         {dashboardStats.map((stat: any, i: number) => (

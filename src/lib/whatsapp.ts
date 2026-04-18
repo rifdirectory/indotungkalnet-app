@@ -40,39 +40,54 @@ export async function sendWhatsApp(to: string, message: string): Promise<{ succe
             return { success: false, message: 'Notifications disabled' };
         }
 
-        if (settings.wa_gateway_mode === 'cloud' && !settings.wa_api_token) {
-            console.error('[WhatsApp] API Token is missing in settings.');
-            return { success: false, message: 'API Token missing' };
-        }
-
         const formattedPhone = formatPhoneNumber(to);
         const url = settings.wa_gateway_url;
 
-        console.log(`[WhatsApp] Sending message to ${formattedPhone}...`);
+        console.log(`[WhatsApp] Sending to ${formattedPhone} (${settings.wa_gateway_mode})...`);
+
+        // Prepare headers
+        const headers: any = {
+            'Content-Type': 'application/json'
+        };
+        
+        // Only send Authorization header in cloud mode
+        if (settings.wa_gateway_mode === 'cloud') {
+            if (!settings.wa_api_token) {
+                return { success: false, message: 'API Token missing for Cloud Mode' };
+            }
+            headers['Authorization'] = settings.wa_api_token;
+        }
 
         const response = await fetch(url, {
             method: 'POST',
-            headers: {
-                'Authorization': settings.wa_api_token,
-                'Content-Type': 'application/json'
-            },
+            headers,
             body: JSON.stringify({
                 target: formattedPhone,
                 message: message,
-                countryCode: '62', // Default for Indonesia
+                countryCode: '62',
             })
         });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            console.error('[WhatsApp] Gateway responded with error:', response.status, errData);
+            return { 
+                success: false, 
+                message: errData.message || `Gateway returned status ${response.status}`,
+                response: errData 
+            };
+        }
 
         const data = await response.json();
 
         if (data.status || data.success) {
             return { success: true, message: 'Message sent successfully', response: data };
         } else {
-            console.error('[WhatsApp] Gateway Error:', data);
-            return { success: false, message: data.reason || 'Gateway error', response: data };
+            console.error('[WhatsApp] Gateway Logic Error:', data);
+            return { success: false, message: data.message || data.reason || 'Gateway error', response: data };
         }
     } catch (error: any) {
-        console.error('[WhatsApp] System Error:', error);
-        return { success: false, message: error.message };
+        console.error('[WhatsApp] Critical System Error:', error);
+        return { success: false, message: `System error: ${error.message}` };
     }
 }

@@ -67,6 +67,7 @@ export default function HomeScreen() {
   const [isOnLeave, setIsOnLeave] = useState(false);
   const [leaveType, setLeaveType] = useState<string | null>(null);
   const [isOffSchedule, setIsOffSchedule] = useState(false);
+  const [attendanceType, setAttendanceType] = useState<'office' | 'anywhere'>('office');
   
   const isFetchingInit = useRef(false);
   
@@ -212,6 +213,7 @@ export default function HomeScreen() {
         setIsOnLeave(d.is_on_leave);
         setLeaveType(d.leave_type);
         setIsOffSchedule(d.is_off_schedule);
+        setAttendanceType(d.attendance_type || 'office');
       }
 
       // 3. Kick off Location in background (Don't await fully to speed up UI)
@@ -253,7 +255,7 @@ export default function HomeScreen() {
         return;
     }
 
-    if (!isWithinRadius) {
+    if (!isWithinRadius && attendanceType === 'office') {
         Alert.alert('Diluar Area', `Maaf, Anda berada ${distance}m dari kantor. Radius maksimal adalah ${officeCoords?.radius}m.`);
         return;
     }
@@ -427,11 +429,11 @@ export default function HomeScreen() {
                         Lokasi Anda
                     </Text>
                 </View>
-                <Text className={`text-lg font-bold ${locationEnabled ? (isWithinRadius ? 'text-emerald-800' : 'text-rose-800') : 'text-amber-800'}`}>
-                    {isOnLeave ? `Sedang Masa ${leaveType?.charAt(0).toUpperCase()}${leaveType?.slice(1)}` : (locationEnabled ? (isWithinRadius ? 'Dalam Area Kantor' : 'Diluar Area') : 'GPS Tidak Aktif')}
+                <Text className={`text-lg font-bold ${locationEnabled ? (isWithinRadius || attendanceType === 'anywhere' ? 'text-emerald-800' : 'text-rose-800') : 'text-amber-800'}`}>
+                    {isOnLeave ? `Sedang Masa ${leaveType?.charAt(0).toUpperCase()}${leaveType?.slice(1)}` : (locationEnabled ? (attendanceType === 'anywhere' ? 'Lokasi Fleksibel Aktif' : (isWithinRadius ? 'Dalam Area Kantor' : 'Diluar Area')) : 'GPS Tidak Aktif')}
                 </Text>
-                <Text className={`text-xs opacity-70 ${locationEnabled ? (isWithinRadius ? 'text-emerald-600' : 'text-rose-600') : 'text-amber-600'}`}>
-                    Status: {userStatus}
+                <Text className={`text-xs opacity-70 ${locationEnabled ? (isWithinRadius || attendanceType === 'anywhere' ? 'text-emerald-600' : 'text-rose-600') : 'text-amber-600'}`}>
+                    Status: {userStatus} {attendanceType === 'anywhere' && '• Remote'}
                 </Text>
             </View>
         </View>

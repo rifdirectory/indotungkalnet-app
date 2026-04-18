@@ -67,8 +67,31 @@ const menuItems: MenuItem[] = [
       { label: "Operator", href: "/products?category=operator" },
     ]
   },
-  { icon: <FinanceIcon />, label: "Laporan Keuangan", href: "#", disabled: true },
-  { icon: <InventoryIcon />, label: "Inventory", href: "#", disabled: true },
+  { 
+    icon: <FinanceIcon />, 
+    label: "Keuangan", 
+    href: "/finance",
+    subItems: [
+      { label: "Dashboard", href: "/finance" },
+      { label: "Kas & Bank", href: "/finance/banks" },
+      { label: "Transaksi", href: "/finance/transactions" },
+      { label: "Hutang & Piutang", href: "/finance/debts" },
+      { label: "Daftar Akun (COA)", href: "/finance/coa" },
+      { label: "Kategori", href: "/finance/categories" },
+    ]
+  },
+  { 
+    icon: <InventoryIcon />, 
+    label: "Inventory", 
+    href: "/inventory",
+    subItems: [
+      { label: "Stok Barang", href: "/inventory" },
+      { label: "Customer Logistik", href: "/inventory/customers" },
+      { label: "Master Logistik", href: "/inventory/master" },
+      { label: "Laporan Penjualan", href: "/reports/inventory-sales" },
+      { label: "Pergerakan Stok", href: "/reports/inventory-movements" },
+    ]
+  },
   { 
     icon: <BadgeIcon />, 
     label: "Data Pegawai", 
@@ -85,10 +108,15 @@ const menuItems: MenuItem[] = [
     subItems: [
       { label: "KPI Pegawai", href: "/performance" },
       { label: "Laporan Absensi", href: "/reports/attendance" },
+      { label: "Laporan Keuangan", href: "/reports/finance" },
+      { label: "Analisis Churn (Revenue)", href: "/reports/churn" },
+      { label: "Efisiensi Lapangan (OpEx)", href: "/reports/efficiency" },
+      { label: "Laporan Penjualan Barang", href: "/reports/inventory-sales" },
+      { label: "Laporan Pergerakan Stok", href: "/reports/inventory-movements" },
     ]
   },
   { icon: <MaintenanceIcon />, label: "Maintenance", href: "/maintenance" },
-  { icon: <TicketIcon />, label: "Tiketing", href: "/support" },
+  { icon: <TicketIcon />, label: "Layanan Pelanggan", href: "/support" },
   // { icon: <ScheduleIcon />, label: "Penugasan", href: "/tasks" },
   { 
     icon: <PresenceIcon />, 
@@ -103,7 +131,6 @@ const menuItems: MenuItem[] = [
     ]
   },
   { icon: <BadgeIcon />, label: "Kirim Notifikasi", href: "/notifications" },
-  { icon: <AnalyticsIcon />, label: "ERP/Analytics", href: "/analytics" },
 ];
 
 function SidebarContent() {
@@ -137,17 +164,26 @@ function SidebarContent() {
     setMounted(true);
   }, []);
 
-  const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>(() => {
-    const initialState: Record<string, boolean> = {};
-    menuItems.forEach(item => {
-      if (item.subItems) initialState[item.label] = true;
-    });
-    return initialState;
-  });
+  const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>({});
 
-  // Keep searchParams/fullPath logic for selection, but don't force openMenus update unless we want it 
-  // actually, the user said "biarkan tetap terbuka", so initializing all to true is best.
-  // We'll remove the useEffect that overrides user choice.
+  // Auto-expand parent menu on mount or pathname change
+  React.useEffect(() => {
+    if (mounted) {
+      const activeParent = menuItems.find(item => 
+        item.subItems?.some(sub => {
+          const subPath = sub.href.split('?')[0];
+          return pathname === subPath || pathname.startsWith(subPath + '/');
+        })
+      );
+      
+      if (activeParent) {
+        setOpenMenus(prev => ({ 
+          ...prev, 
+          [activeParent.label]: true 
+        }));
+      }
+    }
+  }, [mounted, pathname]);
 
   const handleMenuClick = (label: string) => {
     setOpenMenus(prev => ({ ...prev, [label]: !prev[label] }));

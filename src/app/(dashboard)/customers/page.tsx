@@ -80,7 +80,7 @@ export default function CustomersPage() {
 
   const fetchData = async () => {
     const [custRes, prodRes] = await Promise.all([
-      fetch('/api/customers').then(res => res.json()),
+      fetch('/api/customers?exclude=logistics').then(res => res.json()),
       fetch('/api/products').then(res => res.json())
     ]);
     if (custRes.success) setCustomers(Array.isArray(custRes.data) ? custRes.data : []);
@@ -211,16 +211,8 @@ export default function CustomersPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2} sx={{ mb: 5 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.02em' }}>
-            Data Customer
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            Kelola data pelanggan ITNET secara efisien.
-          </Typography>
-        </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 3 }}>
         <Button 
           variant="contained" 
           startIcon={<AddIcon />}

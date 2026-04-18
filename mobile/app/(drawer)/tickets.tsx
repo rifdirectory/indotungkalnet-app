@@ -202,16 +202,6 @@ export default function TicketListScreen() {
         )}
       </ScrollView>
 
-      {/* FAB for creation if not already in header */}
-      <View className="absolute bottom-32 right-6">
-        <TouchableOpacity 
-          onPress={() => router.push('/add-ticket')}
-          className="bg-blue-600 w-14 h-14 rounded-full items-center justify-center shadow-2xl shadow-blue-500/50"
-        >
-          <Plus size={28} color="white" />
-        </TouchableOpacity>
-      </View>
-
     </SafeAreaView>
   );
 }

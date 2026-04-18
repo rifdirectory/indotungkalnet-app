@@ -199,31 +199,21 @@ export default function SchedulePageContent() {
   };
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 5 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 2 }}>
-            <EventNoteIcon color="primary" /> Jadwal Shift
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            Klik pada kotak untuk menentukan jadwal shift pegawai bulanan.
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={2} alignItems="center">
-          <IconButton onClick={() => {
-            const d = new Date(currentDate);
-            d.setMonth(d.getMonth() - 1);
-            setCurrentDate(d);
-          }}><PrevIcon /></IconButton>
-          <Typography sx={{ fontWeight: 800, minWidth: 150, textAlign: 'center', textTransform: 'capitalize' }}>
-            {currentDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
-          </Typography>
-          <IconButton onClick={() => {
-            const d = new Date(currentDate);
-            d.setMonth(d.getMonth() + 1);
-            setCurrentDate(d);
-          }}><NextIcon /></IconButton>
-        </Stack>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+      <Stack direction="row" justifyContent="flex-end" spacing={2} alignItems="center" sx={{ mb: 4 }}>
+        <IconButton onClick={() => {
+          const d = new Date(currentDate);
+          d.setMonth(d.getMonth() - 1);
+          setCurrentDate(d);
+        }}><PrevIcon /></IconButton>
+        <Typography sx={{ fontWeight: 800, minWidth: 150, textAlign: 'center', textTransform: 'capitalize' }}>
+          {currentDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+        </Typography>
+        <IconButton onClick={() => {
+          const d = new Date(currentDate);
+          d.setMonth(d.getMonth() + 1);
+          setCurrentDate(d);
+        }}><NextIcon /></IconButton>
       </Stack>
 
       <Card sx={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 30px rgba(0,0,0,0.08)' }}>

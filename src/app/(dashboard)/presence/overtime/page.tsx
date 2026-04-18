@@ -137,12 +137,8 @@ export default function OvertimeManagementPage() {
   };
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>Penugasan Lembur</Typography>
-          <Typography variant="body1" color="text.secondary">Kelola dan tugaskan lembur kepada teknisi lapangan.</Typography>
-        </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 4 }}>
         <Button 
           variant="contained" 
           startIcon={<AddIcon />} 

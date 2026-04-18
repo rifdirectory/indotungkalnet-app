@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getJakartaNow } from '@/lib/dateUtils';
+import { logActivity } from '@/lib/audit';
 
 export async function GET(request: Request) {
   try {
@@ -102,11 +103,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { 
-      full_name, position_id, phone, status, join_date
+      full_name, position_id, phone, status, join_date, attendance_type, user
     } = body;
 
     // Generate employee code (simplified format: 0XX-YYYY-ITN)
-    const result = await db.query('SELECT employee_code FROM employees ORDER BY id DESC LIMIT 1');
+    const result: any = await db.query('SELECT employee_code FROM employees ORDER BY id DESC LIMIT 1');
     const lastRows = Array.isArray(result) ? result : [];
     
     let nextNum = 1;
@@ -117,13 +118,24 @@ export async function POST(request: Request) {
     }
     const employee_code = `${String(nextNum).padStart(3, '0')}-${new Date().getFullYear()}-ITN`;
 
-    await db.query(
+    const insertResult: any = await db.query(
       `INSERT INTO employees (
-        employee_code, full_name, position_id, phone, status, join_date
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
+        employee_code, full_name, position_id, phone, status, join_date, attendance_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        employee_code, full_name, position_id, phone, status, join_date
+        employee_code, full_name, position_id, phone, status, join_date, attendance_type || 'office'
       ]
+    );
+
+    const employeeId = insertResult.insertId;
+
+    // Record Audit Log
+    await logActivity(
+        user || 'Admin',
+        'INSERT',
+        'Employees',
+        employeeId ? `EMP-${employeeId}` : null,
+        { full_name, employee_code, status }
     );
 
     return NextResponse.json({ success: true, message: 'Employee created successfully' });

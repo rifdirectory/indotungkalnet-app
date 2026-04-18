@@ -25,16 +25,8 @@ export default function AnalyticsPage() {
   const theme = useTheme();
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 } }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2} sx={{ mb: 5 }}>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary', letterSpacing: '-0.02em' }}>
-                ERP & Business Analytics
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-                Wawasan bisnis mendalam untuk pertumbuhan PT. Indo Tungkal Net.
-              </Typography>
-            </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+          <Stack direction="row" justifyContent="flex-end" sx={{ mb: 4 }}>
             <Button 
               variant="outlined" 
               sx={{ borderRadius: 3, fontWeight: 700 }}

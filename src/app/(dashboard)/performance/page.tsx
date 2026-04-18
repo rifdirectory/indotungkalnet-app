@@ -180,66 +180,51 @@ const PerformanceDashboard = () => {
   }, [employees, activeTab, globalStats]);
 
   return (
-    <Box sx={{ p: { xs: 3, md: 5 }, minHeight: '100vh', bgcolor: '#f8fafc' }}>
-      {/* Header */}
-      <Stack direction={{ xs: 'column', lg: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', lg: 'center' }} spacing={3} sx={{ mb: 4 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', letterSpacing: '-0.02em' }}>
-            Penilaian Kinerja
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            {activeTab === 0 
-              ? `Laporan akumulasi performa periode ${months[filterMonth - 1]} ${filterYear}.` 
-              : `Pencatatan penilaian harian untuk tanggal ${selectedDate}.`
-            }
-          </Typography>
-        </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2, minHeight: '100vh', bgcolor: '#f8fafc' }}>
+      <Stack direction="row" justifyContent="flex-end" spacing={2} alignItems="center" sx={{ mb: 4 }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={(_, v) => setActiveTab(v)}
+          sx={{ 
+            bgcolor: 'white', 
+            borderRadius: 4, 
+            p: 0.5, 
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+            '& .MuiTabs-indicator': { height: '100%', borderRadius: 3.5, bgcolor: alpha(theme.palette.primary.main, 0.1) },
+            '& .MuiTab-root': { borderRadius: 3.5, fontWeight: 700, minHeight: 45, zIndex: 1, textTransform: 'none' }
+          }}
+        >
+          <Tab icon={<ChartIcon sx={{ fontSize: 18 }} />} label="Laporan Bulanan" iconPosition="start" />
+          <Tab icon={<TodayIcon sx={{ fontSize: 18 }} />} label="Input Harian" iconPosition="start" />
+        </Tabs>
 
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Tabs 
-            value={activeTab} 
-            onChange={(_, v) => setActiveTab(v)}
-            sx={{ 
-              bgcolor: 'white', 
-              borderRadius: 4, 
-              p: 0.5, 
-              boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-              '& .MuiTabs-indicator': { height: '100%', borderRadius: 3.5, bgcolor: alpha(theme.palette.primary.main, 0.1) },
-              '& .MuiTab-root': { borderRadius: 3.5, fontWeight: 700, minHeight: 45, zIndex: 1, textTransform: 'none' }
-            }}
-          >
-            <Tab icon={<ChartIcon sx={{ fontSize: 18 }} />} label="Laporan Bulanan" iconPosition="start" />
-            <Tab icon={<TodayIcon sx={{ fontSize: 18 }} />} label="Input Harian" iconPosition="start" />
-          </Tabs>
-
-          <Card sx={{ p: 1, borderRadius: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', display: 'flex', gap: 1 }}>
-            {activeTab === 0 ? (
-              <>
-                <TextField
-                  select size="small" value={filterMonth}
-                  onChange={(e) => setFilterMonth(Number(e.target.value))}
-                  sx={{ minWidth: 140, '& .MuiOutlinedInput-root': { borderRadius: 3, border: 'none', '& fieldset': { border: 'none' } } }}
-                >
-                  {months.map((m, i) => <MenuItem key={m} value={i + 1}>{m}</MenuItem>)}
-                </TextField>
-                <Divider orientation="vertical" flexItem />
-                <TextField
-                  select size="small" value={filterYear}
-                  onChange={(e) => setFilterYear(Number(e.target.value))}
-                  sx={{ minWidth: 100, '& .MuiOutlinedInput-root': { borderRadius: 3, border: 'none', '& fieldset': { border: 'none' } } }}
-                >
-                  {years.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
-                </TextField>
-              </>
-            ) : (
+        <Card sx={{ p: 1, borderRadius: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', display: 'flex', gap: 1 }}>
+          {activeTab === 0 ? (
+            <>
               <TextField
-                type="date" size="small" value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                sx={{ minWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: 3, border: 'none', '& fieldset': { border: 'none' } } }}
-              />
-            )}
-          </Card>
-        </Stack>
+                select size="small" value={filterMonth}
+                onChange={(e) => setFilterMonth(Number(e.target.value))}
+                sx={{ minWidth: 140, '& .MuiOutlinedInput-root': { borderRadius: 3, border: 'none', '& fieldset': { border: 'none' } } }}
+              >
+                {months.map((m, i) => <MenuItem key={m} value={i + 1}>{m}</MenuItem>)}
+              </TextField>
+              <Divider orientation="vertical" flexItem />
+              <TextField
+                select size="small" value={filterYear}
+                onChange={(e) => setFilterYear(Number(e.target.value))}
+                sx={{ minWidth: 100, '& .MuiOutlinedInput-root': { borderRadius: 3, border: 'none', '& fieldset': { border: 'none' } } }}
+              >
+                {years.map((y) => <MenuItem key={y} value={y}>{y}</MenuItem>)}
+              </TextField>
+            </>
+          ) : (
+            <TextField
+              type="date" size="small" value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              sx={{ minWidth: 160, '& .MuiOutlinedInput-root': { borderRadius: 3, border: 'none', '& fieldset': { border: 'none' } } }}
+            />
+          )}
+        </Card>
       </Stack>
 
       {/* Monthly Stats Cards (Only in Tab 0) */}

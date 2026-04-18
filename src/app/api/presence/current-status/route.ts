@@ -121,7 +121,7 @@ export async function GET(req: Request) {
 
         // 6. Calculate is_off_schedule
         const employeeData: any = await query(`
-            SELECT p.use_presence, p.name as position_name 
+            SELECT p.use_presence, p.name as position_name, e.attendance_type
             FROM employees e 
             LEFT JOIN positions p ON e.position_id = p.id 
             WHERE e.id = ?
@@ -149,7 +149,8 @@ export async function GET(req: Request) {
                 can_clock_out: !!canClockOut,
                 is_on_leave: isOnLeave,
                 leave_type: leaveType,
-                is_off_schedule: isOffSchedule
+                is_off_schedule: isOffSchedule,
+                attendance_type: emp.attendance_type || 'office'
             }
         }, { status: 200, headers: corsHeaders });
 

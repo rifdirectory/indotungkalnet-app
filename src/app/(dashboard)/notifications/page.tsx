@@ -128,24 +128,7 @@ export default function NotificationsPage() {
   );
 
   return (
-    <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1200, margin: '0 auto' }}>
-      {/* Header Section */}
-      <Box sx={{ mb: 4 }}>
-        <Breadcrumbs sx={{ mb: 1 }}>
-          <MuiLink component={Link} href="/" underline="hover" color="inherit" sx={{ fontSize: '0.8rem' }}>
-            Dashboard
-          </MuiLink>
-          <Typography color="text.primary" sx={{ fontSize: '0.8rem' }}>
-            Kirim WhatsApp
-          </Typography>
-        </Breadcrumbs>
-        <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', mb: 1 }}>
-          Broadcast WhatsApp 📱
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Kirim pesan pengumuman atau instruksi langsung ke WhatsApp karyawan.
-        </Typography>
-      </Box>
+    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems="flex-start">
         {/* User Selection Card */}

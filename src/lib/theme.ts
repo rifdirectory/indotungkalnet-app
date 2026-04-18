@@ -34,12 +34,13 @@ const theme = createTheme({
   },
   typography: {
     fontFamily: 'var(--font-inter), "Roboto", "Helvetica", "Arial", sans-serif',
-    h1: { fontWeight: 700 },
-    h2: { fontWeight: 700 },
-    h3: { fontWeight: 700 },
-    h4: { fontWeight: 700 },
-    h5: { fontWeight: 600 },
-    h6: { fontWeight: 600 },
+    fontSize: 13,
+    h1: { fontWeight: 700, fontSize: '2rem' },
+    h2: { fontWeight: 700, fontSize: '1.75rem' },
+    h3: { fontWeight: 700, fontSize: '1.5rem' },
+    h4: { fontWeight: 700, fontSize: '1.25rem' },
+    h5: { fontWeight: 600, fontSize: '1.1rem' },
+    h6: { fontWeight: 600, fontSize: '1rem' },
     subtitle1: { fontWeight: 500 },
     subtitle2: { fontWeight: 600 },
     body1: { fontWeight: 400 },
@@ -53,8 +54,8 @@ const theme = createTheme({
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: '12px',
-          padding: '8px 20px',
+          borderRadius: '8px',
+          padding: '6px 16px',
           boxShadow: 'none',
           '&:hover': {
             boxShadow: 'none',
@@ -78,7 +79,7 @@ const theme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: {
-          borderRadius: '12px', // 12px rounding for cards
+          borderRadius: '8px', // Smaller rounding for more compact feel
           backgroundImage: 'none',
           backgroundColor: '#ffffff',
           border: '1px solid rgba(0, 0, 0, 0.08)', // Google Material border
@@ -103,12 +104,13 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderBottom: '1px solid #dadce0',
+          padding: '10px 16px', // Tighter rows
         },
         head: {
           fontWeight: 600,
           color: '#5f6368', // Google secondary text
           textTransform: 'uppercase',
-          fontSize: '0.75rem',
+          fontSize: '0.7rem',
           letterSpacing: '0.05em',
         },
       },
