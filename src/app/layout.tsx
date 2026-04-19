@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="id">
+    <html lang="id" suppressHydrationWarning>
       <body className={`${inter.variable} ${inter.className} min-h-screen bg-slate-50 text-slate-900 antialiased`}>
         <AppRouterCacheProvider>
           <ThemeProvider theme={theme}>

@@ -39,6 +39,7 @@ export default function TaskDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [repairNote, setRepairNote] = useState('');
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const fetchTaskDetail = async () => {
     try {
@@ -311,14 +312,24 @@ export default function TaskDetailScreen() {
               <Text className="text-slate-500 text-center mt-2 leading-5 font-medium">Mohon isi keterangan perbaikan untuk menutup tiket ini.</Text>
             </View>
 
-            <TextInput
-              multiline
-              placeholder="Contoh: Ganti dropcore patchcord di FO 3..."
-              className="bg-slate-50 border border-slate-100 p-5 rounded-[24px] text-slate-700 h-40 mb-8 font-medium"
-              textAlignVertical="top"
-              value={repairNote}
-              onChangeText={setRepairNote}
-            />
+            <View className={`p-5 rounded-[24px] border mb-8 h-40 transition-all ${focusedField === 'repair' ? 'bg-white border-emerald-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+              <TextInput
+                multiline
+                placeholder={focusedField === 'repair' ? "" : "Contoh: Ganti dropcore patchcord di FO 3..."}
+                placeholderTextColor="#94a3b8"
+                onFocus={() => setFocusedField('repair')}
+                onBlur={() => setFocusedField(null)}
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
+                importantForAutofill="no"
+                spellCheck={false}
+                className="text-slate-700 font-medium flex-1 leading-5 border-0 outline-none p-0 bg-transparent"
+                textAlignVertical="top"
+                value={repairNote}
+                onChangeText={setRepairNote}
+              />
+            </View>
 
             <View className="flex-row space-x-3">
               <TouchableOpacity 

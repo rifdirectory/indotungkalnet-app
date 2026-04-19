@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Box, 
   Typography, 
@@ -29,14 +29,18 @@ import {
   Divider,
   Snackbar,
   Alert,
-  Autocomplete
+  Autocomplete,
+  Grid
 } from "@mui/material";
 import { 
   Add as AddIcon,
   FilterList as FilterIcon,
   ArrowBack as BackIcon,
   Inventory as InventoryIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  TrendingDown,
+  TrendingUp,
+  AccountBalanceWallet
 } from "@mui/icons-material";
 import Link from 'next/link';
 import Portal from '@/components/Portal';
@@ -46,7 +50,6 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
-  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [openAdd, setOpenAdd] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', type: 'success' as 'success' | 'error' });
@@ -69,11 +72,25 @@ export default function TransactionsPage() {
     category_id: '',
     account_id: '1', // Default to Kas (ID: 1)
     amount: '',
-    notes: '',
-    linkInventory: false,
-    inventory_item_id: '',
-    inventory_qty: 1
+    notes: ''
   });
+
+  // Calculate Totals
+  const { totalIn, totalOut, balance } = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    transactions.forEach(tx => {
+      if (tx.status !== 'void') {
+        if (tx.type === 'income') income += Number(tx.amount);
+        else expense += Number(tx.amount);
+      }
+    });
+    return {
+      totalIn: income,
+      totalOut: expense,
+      balance: income - expense
+    };
+  }, [transactions]);
 
   useEffect(() => {
     fetchData();
@@ -96,22 +113,19 @@ export default function TransactionsPage() {
         url += `startDate=${customRange.start}&endDate=${customRange.end}`;
       }
 
-      const [txRes, catRes, accRes, invRes] = await Promise.all([
+      const [txRes, catRes, accRes] = await Promise.all([
         fetch(url),
         fetch('/api/finances/categories'),
-        fetch('/api/finances/banks'),
-        fetch('/api/inventory')
+        fetch('/api/finances/banks')
       ]);
       
       const txData = await txRes.json();
       const catData = await catRes.json();
       const accData = await accRes.json();
-      const invData = await invRes.json();
       
       if(txData.success) setTransactions(txData.data);
       if(catData.success) setCategories(catData.data);
       if(accData.success) setAccounts(accData.data);
-      if(invData.success) setInventoryItems(invData.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -137,30 +151,17 @@ export default function TransactionsPage() {
       setSnackbar({ open: true, message: 'Pilih rekening Kas/Bank.', type: 'error' });
       return;
     }
-    if (formData.linkInventory && !formData.inventory_item_id) {
-      setSnackbar({ open: true, message: 'Pilih barang gudang terlebih dahulu.', type: 'error' });
-      return;
-    }
-    if (formData.linkInventory && Number(formData.inventory_qty) <= 0) {
-      setSnackbar({ open: true, message: 'Jumlah unit harus lebih dari 0.', type: 'error' });
-      return;
-    }
+    
 
     try {
-      const payload = {
-        ...formData,
-        inventory_item_id: formData.linkInventory ? formData.inventory_item_id : null,
-        inventory_qty: formData.linkInventory ? formData.inventory_qty : null
-      };
-
       const res = await fetch('/api/finances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(formData)
       });
       const data = await res.json();
       if(data.success) {
-        setSnackbar({ open: true, message: 'Transaksi berhasil disimpan' + (formData.linkInventory ? ' & stok gudang diperbarui' : ''), type: 'success' });
+        setSnackbar({ open: true, message: 'Transaksi berhasil disimpan', type: 'success' });
         setOpenAdd(false);
         fetchData();
         setFormData({
@@ -170,9 +171,8 @@ export default function TransactionsPage() {
             account_id: '1',
             amount: '',
             notes: '',
-            linkInventory: false,
-            inventory_item_id: '',
-            inventory_qty: 1
+            amount: '',
+            notes: ''
         });
       } else {
         throw new Error(data.message);
@@ -214,7 +214,7 @@ export default function TransactionsPage() {
   return (
     <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
 
-      <Portal>
+      <Portal container={typeof document !== 'undefined' ? document.getElementById('header-actions-portal') : null}>
         <Stack direction="row" justifyContent="flex-end" spacing={2}>
           <Button 
             variant={dateFilter !== 'all' ? "contained" : "outlined"} 
@@ -260,6 +260,39 @@ export default function TransactionsPage() {
         </Stack>
       )}
 
+      {/* Summary Cards */}
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={3} sx={{ mb: 4, width: '100%' }}>
+        <Card sx={{ flex: 1, p: 3, borderRadius: 4, display: 'flex', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: '1px solid', borderColor: alpha(theme.palette.success.main, 0.1) }}>
+          <Box sx={{ p: 1.5, borderRadius: 3, bgcolor: alpha(theme.palette.success.main, 0.1), mr: 2 }}>
+            <TrendingUp color="success" />
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>Pemasukan (In)</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 900, color: 'success.main' }}>{formatCurrency(totalIn)}</Typography>
+          </Box>
+        </Card>
+        
+        <Card sx={{ flex: 1, p: 3, borderRadius: 4, display: 'flex', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: '1px solid', borderColor: alpha(theme.palette.error.main, 0.1) }}>
+          <Box sx={{ p: 1.5, borderRadius: 3, bgcolor: alpha(theme.palette.error.main, 0.1), mr: 2 }}>
+            <TrendingDown color="error" />
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>Pengeluaran (Out)</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 900, color: 'error.main' }}>{formatCurrency(totalOut)}</Typography>
+          </Box>
+        </Card>
+
+        <Card sx={{ flex: 1, p: 3, borderRadius: 4, display: 'flex', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', border: '1px solid', borderColor: alpha(theme.palette.primary.main, 0.1), bgcolor: alpha(theme.palette.primary.main, 0.01) }}>
+          <Box sx={{ p: 1.5, borderRadius: 3, bgcolor: alpha(theme.palette.primary.main, 0.1), mr: 2 }}>
+            <AccountBalanceWallet color="primary" />
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>Saldo Netto</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 900, color: 'primary.main' }}>{formatCurrency(balance)}</Typography>
+          </Box>
+        </Card>
+      </Stack>
+
       <Card sx={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.05)' }}>
         <TableContainer>
           <Table>
@@ -269,9 +302,9 @@ export default function TransactionsPage() {
                 <TableCell sx={{ fontWeight: 800 }}>Tanggal</TableCell>
                 <TableCell sx={{ fontWeight: 800 }}>Kategori</TableCell>
                 <TableCell sx={{ fontWeight: 800 }}>Rekening</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Keterangan / PIC</TableCell>
-                <TableCell sx={{ fontWeight: 800 }}>Tipe</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 800 }}>Jumlah</TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>Deskripsi / PIC</TableCell>
+                <TableCell sx={{ fontWeight: 800 }}>Debit (In)</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 800 }}>Kredit (Out)</TableCell>
                 <TableCell align="center" sx={{ fontWeight: 800 }}>Status</TableCell>
                 <TableCell align="center" sx={{ fontWeight: 800 }}>Aksi</TableCell>
               </TableRow>
@@ -321,18 +354,14 @@ export default function TransactionsPage() {
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Oleh: {tx.user}</Typography>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <Chip 
-                        label={tx.type === 'income' ? 'Masuk' : 'Keluar'} 
-                        size="small" 
-                        color={tx.type === 'income' ? 'success' : 'error'}
-                        variant="outlined"
-                        sx={{ fontWeight: 800, borderRadius: 1.5, fontSize: '0.65rem', textTransform: 'uppercase' }} 
-                    />
+                  <TableCell align="right">
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'success.main', textDecoration: tx.status === 'void' ? 'line-through' : 'none', opacity: tx.status === 'void' ? 0.5 : 1 }}>
+                      {tx.type === 'income' ? formatCurrency(tx.amount) : '-'}
+                    </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: tx.type === 'income' ? 'success.main' : 'error.main', textDecoration: tx.status === 'void' ? 'line-through' : 'none', opacity: tx.status === 'void' ? 0.5 : 1 }}>
-                      {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'error.main', textDecoration: tx.status === 'void' ? 'line-through' : 'none', opacity: tx.status === 'void' ? 0.5 : 1 }}>
+                      {tx.type === 'expense' ? formatCurrency(tx.amount) : '-'}
                     </Typography>
                   </TableCell>
                   <TableCell align="center">
@@ -380,8 +409,8 @@ export default function TransactionsPage() {
               value={formData.type}
               onChange={(e) => setFormData({ ...formData, type: e.target.value, category_id: '' })}
             >
-              <MenuItem value="income">Uang Masuk (Income)</MenuItem>
-              <MenuItem value="expense">Uang Keluar (Expense)</MenuItem>
+              <MenuItem value="income">Uang Masuk (Debit)</MenuItem>
+              <MenuItem value="expense">Uang Keluar (Kredit)</MenuItem>
             </TextField>
             <TextField
               select
@@ -418,51 +447,7 @@ export default function TransactionsPage() {
               onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
             />
             
-            <Divider sx={{ my: 1 }} />
             
-            <Box sx={{ bgcolor: alpha(theme.palette.primary.main, 0.03), p: 2, borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
-                <FormControlLabel
-                    control={
-                        <Switch 
-                            checked={formData.linkInventory} 
-                            onChange={(e) => setFormData({ ...formData, linkInventory: e.target.checked })} 
-                        />
-                    }
-                    label={<Typography variant="body2" sx={{ fontWeight: 700 }}>Hubungkan ke Stok Gudang?</Typography>}
-                />
-                
-                {formData.linkInventory && (
-                    <Stack spacing={2} sx={{ mt: 2 }}>
-                        <Autocomplete
-                            options={inventoryItems}
-                            getOptionLabel={(option) => `${option.name} (Sisa: ${option.stock})`}
-                            value={inventoryItems.find(i => i.id === formData.inventory_item_id) || null}
-                            onChange={(_, newValue) => {
-                                setFormData({ ...formData, inventory_item_id: newValue ? newValue.id : '' });
-                            }}
-                            renderInput={(params) => (
-                                <TextField
-                                    {...params}
-                                    label="Pilih Barang"
-                                    size="small"
-                                    fullWidth
-                                    helperText="Ketik nama untuk mencari barang"
-                                />
-                            )}
-                            sx={{ mt: 1 }}
-                        />
-                        <TextField
-                            label="Jumlah Unit"
-                            type="number"
-                            size="small"
-                            fullWidth
-                            value={formData.inventory_qty}
-                            onChange={(e) => setFormData({ ...formData, inventory_qty: Number(e.target.value) })}
-                            helperText={formData.type === 'income' ? 'Stok akan berkurang (Penjualan)' : 'Stok akan bertambah (Pembelian)'}
-                        />
-                    </Stack>
-                )}
-            </Box>
 
             <TextField
               label="Keterangan Tambahan"

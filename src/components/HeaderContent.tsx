@@ -12,7 +12,7 @@ import {
   alpha,
   useTheme
 } from '@mui/material';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { 
   Search as SearchIcon, 
   Notifications as NotificationsIcon,
@@ -75,14 +75,32 @@ const ROUTE_TITLES: Record<string, { title: string; icon: React.ReactNode; color
   '/notifications': { title: 'Kirim Notifikasi', icon: <NotificationsIcon />, color: 'warning' },
   '/analytics': { title: 'ERP & Analytics', icon: <ReportIcon />, color: 'primary' },
   '/tasks': { title: 'Manajemen Tugas', icon: <TaskIcon />, color: 'warning' },
+  '/inventory/pos': { title: 'POS ITNet', icon: <WarehouseIcon />, color: 'primary' },
 };
 
 export default function HeaderContent({ onLogout }: HeaderContentProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const theme = useTheme();
 
+  const view = searchParams.get('view');
+
   // Find matching route or fallback
-  const currentRoute = ROUTE_TITLES[pathname] || ROUTE_TITLES['/'];
+  let currentRoute = ROUTE_TITLES[pathname] || ROUTE_TITLES['/'];
+
+  // Dynamic overrides for Inventory views
+  if (pathname === '/inventory') {
+    if (view === 'invoices') {
+      currentRoute = { title: 'Invoice POS', icon: <TrxIcon />, color: 'primary' };
+    } else if (view === 'billing') {
+      currentRoute = { title: 'Tagihan Bulanan', icon: <HistoryIcon />, color: 'primary' };
+    } else if (view === 'assets') {
+      currentRoute = { title: 'Aset di Pelanggan', icon: <WarehouseIcon />, color: 'primary' };
+    } else if (view === 'stock') {
+      currentRoute = { title: 'Stok Barang', icon: <InventoryIcon />, color: 'primary' };
+    }
+  }
+
   const color = (theme.palette as any)[currentRoute.color]?.main || theme.palette.primary.main;
 
   return (

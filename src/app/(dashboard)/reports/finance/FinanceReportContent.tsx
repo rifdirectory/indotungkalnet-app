@@ -69,18 +69,30 @@ export default function FinanceReportContent() {
     setLoading(true);
     try {
       const q = buildQueryString();
+      
+      const safeFetch = async (url: string) => {
+        const res = await fetch(url);
+        if (!res.ok) {
+          const text = await res.text();
+          console.error(`Fetch failed for ${url}: ${res.status} ${res.statusText}`, text.substring(0, 100));
+          throw new Error(`API Error: ${res.status}`);
+        }
+        return res.json();
+      };
+
       const [r1, r2, r3, r4] = await Promise.all([
-        fetch(`/api/reports/finance?${q}`).then(r => r.json()),
-        fetch(`/api/reports/finance/balance-sheet?year=${selectedYear}`).then(r => r.json()),
-        fetch(`/api/reports/finance/cashflow?${q}`).then(r => r.json()),
-        fetch(`/api/finances/budget?month=${selectedMonth}&year=${selectedYear}`).then(r => r.json())
+        safeFetch(`/api/reports/finance/summary?${q}`),
+        safeFetch(`/api/reports/finance/balance-sheet?year=${selectedYear}&month=${selectedMonth}`),
+        safeFetch(`/api/reports/finance/cashflow?${q}`),
+        safeFetch(`/api/finances/budget?month=${selectedMonth}&year=${selectedYear}`)
       ]);
+      
       if (r1.success) setReportData(r1.data);
       if (r2.success) setBalanceSheet(r2.data);
       if (r3.success) setCashFlow(r3.data);
       if (r4.success) setBudgetData(r4.data);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error('FetchAll Error:', e.message);
     } finally {
       setLoading(false);
     }
@@ -163,7 +175,7 @@ export default function FinanceReportContent() {
 
   return (
     <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
-      <Portal>
+      <Portal container={typeof document !== 'undefined' ? document.getElementById('header-actions-portal') : null}>
         <Stack direction="row" spacing={1.5} alignItems="center">
           <Button variant="outlined" startIcon={<CalendarIcon />} onClick={(e) => setAnchorEl(e.currentTarget)}
             sx={{ borderRadius: 2, border: '1px solid', borderColor: 'divider', textTransform: 'none', fontWeight: 700, px: 1.5, py: 0.5 }} size="small">
@@ -352,8 +364,8 @@ export default function FinanceReportContent() {
                   <TableCell sx={{ fontWeight: 800 }}>Tanggal</TableCell>
                   <TableCell sx={{ fontWeight: 800 }}>Kategori</TableCell>
                   <TableCell sx={{ fontWeight: 800 }}>Deskripsi</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 800 }}>Masuk (Income)</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 800 }}>Keluar (Expense)</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 800 }}>Debit (Masuk)</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 800 }}>Kredit (Keluar)</TableCell>
                   <TableCell align="center" sx={{ fontWeight: 800 }}>Status</TableCell>
                 </TableRow>
               </TableHead>
@@ -460,7 +472,9 @@ export default function FinanceReportContent() {
           {!balanceSheet ? <CircularProgress /> : (
             <>
               <Box sx={{ mb: 3, p: 3, borderRadius: 3, bgcolor: alpha(theme.palette.info.main, 0.05), border: '1px solid', borderColor: alpha(theme.palette.info.main, 0.1) }}>
-                <Typography variant="caption" color="info.main" sx={{ fontWeight: 800 }}>NERACA KEUANGAN — Per Tanggal {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</Typography>
+                <Typography variant="caption" color="info.main" sx={{ fontWeight: 800 }}>
+                  NERACA KEUANGAN — Per Tanggal {new Date(balanceSheet.asOf).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 900, mt: 0.5 }}>Total Aset: {formatCurrency(balanceSheet.assets.total)}</Typography>
               </Box>
               <Grid container spacing={4}>
@@ -474,7 +488,7 @@ export default function FinanceReportContent() {
                     <TableContainer>
                       <Table>
                         <TableBody>
-                          <TableRow sx={{ bgcolor: 'rgba(0,0,0,0.02)' }}>
+                          <TableRow sx={{ bgcolor: alpha(theme.palette.success.main, 0.05) }}>
                             <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.75rem' }} colSpan={2}>AKTIVA LANCAR</TableCell>
                           </TableRow>
                           {[
@@ -492,9 +506,30 @@ export default function FinanceReportContent() {
                               <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(item.val)}</TableCell>
                             </TableRow>
                           ))}
-                          <TableRow sx={{ bgcolor: alpha(theme.palette.success.main, 0.05) }}>
-                            <TableCell sx={{ fontWeight: 900, color: 'success.dark' }}>TOTAL AKTIVA</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 900, color: 'success.dark', fontSize: '1rem' }}>{formatCurrency(balanceSheet.assets.total)}</TableCell>
+                          
+                          {/* AKTIVA TETAP */}
+                          <TableRow sx={{ bgcolor: alpha(theme.palette.success.main, 0.05), mt: 2 }}>
+                            <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.75rem' }} colSpan={2}>AKTIVA TETAP (NON-CURRENT)</TableCell>
+                          </TableRow>
+                          {[
+                            { label: 'Tanah & Bangunan', val: (balanceSheet.assets.fixed?.land || 0) + (balanceSheet.assets.fixed?.infrastructure || 0), icon: <ProfitIcon sx={{ fontSize: 16 }} /> },
+                            { label: 'Peralatan & Perlengkapan', val: balanceSheet.assets.fixed?.equipment || 0, icon: <InventoryIcon sx={{ fontSize: 16 }} /> },
+                            { label: 'Kendaraan & Aset Lainnya', val: (balanceSheet.assets.fixed?.vehicle || 0) + (balanceSheet.assets.fixed?.other || 0), icon: <ProfitIcon sx={{ fontSize: 16 }} /> },
+                          ].map(item => (
+                            <TableRow key={item.label} hover>
+                              <TableCell sx={{ pl: 4 }}>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <Box sx={{ color: 'success.main' }}>{item.icon}</Box>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{item.label}</Typography>
+                                </Stack>
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(item.val)}</TableCell>
+                            </TableRow>
+                          ))}
+
+                          <TableRow sx={{ bgcolor: alpha(theme.palette.success.main, 0.1) }}>
+                            <TableCell sx={{ fontWeight: 900, color: 'success.dark', py: 2.5 }}>TOTAL AKTIVA (SNAPSHOT)</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 900, color: 'success.dark', fontSize: '1.1rem' }}>{formatCurrency(balanceSheet.assets.total)}</TableCell>
                           </TableRow>
                         </TableBody>
                       </Table>
@@ -522,7 +557,16 @@ export default function FinanceReportContent() {
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>Hutang Usaha (ke Vendor)</Typography>
                               </Stack>
                             </TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(balanceSheet.liabilities.payables)}</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(balanceSheet.liabilities.accounts_payable)}</TableCell>
+                          </TableRow>
+                          <TableRow hover>
+                            <TableCell sx={{ pl: 4 }}>
+                              <Stack direction="row" spacing={1} alignItems="center">
+                                <ProfitIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>Utang Bank / Pinjaman</Typography>
+                              </Stack>
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>{formatCurrency(balanceSheet.liabilities.bank_loans)}</TableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell sx={{ fontWeight: 800 }}>TOTAL KEWAJIBAN</TableCell>
@@ -660,8 +704,8 @@ export default function FinanceReportContent() {
                     </Box>
                     <TableContainer><Table size="small">
                       <TableBody>
-                        <TableRow><TableCell sx={{ pl: 3, color: 'text.secondary' }}>Pembayaran Hutang</TableCell><TableCell align="right" sx={{ color: 'error.main', fontWeight: 700 }}>({formatCurrency(cashFlow.financing.debtPayments)})</TableCell></TableRow>
-                        <TableRow><TableCell sx={{ pl: 3, color: 'text.secondary' }}>Penagihan Piutang</TableCell><TableCell align="right" sx={{ color: 'success.main', fontWeight: 700 }}>{formatCurrency(cashFlow.financing.receivableCollection)}</TableCell></TableRow>
+                        <TableRow><TableCell sx={{ pl: 3, color: 'text.secondary' }}>Penerimaan Pinjaman/Piutang</TableCell><TableCell align="right" sx={{ color: 'success.main', fontWeight: 700 }}>{formatCurrency(cashFlow.financing.inflows)}</TableCell></TableRow>
+                        <TableRow><TableCell sx={{ pl: 3, color: 'text.secondary' }}>Pembayaran Hutang/Sewa</TableCell><TableCell align="right" sx={{ color: 'error.main', fontWeight: 700 }}>({formatCurrency(cashFlow.financing.outflows)})</TableCell></TableRow>
                         <TableRow sx={{ bgcolor: alpha(theme.palette.warning.main, 0.03) }}>
                           <TableCell sx={{ fontWeight: 900 }}>NET PEMBIAYAAN</TableCell>
                           <TableCell align="right" sx={{ fontWeight: 900, color: cashFlow.financing.net >= 0 ? 'success.main' : 'error.main' }}>{formatCurrency(cashFlow.financing.net)}</TableCell>

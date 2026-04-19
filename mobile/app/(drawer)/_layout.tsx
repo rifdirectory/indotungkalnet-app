@@ -8,13 +8,9 @@ import CustomDrawerContent from '../../components/CustomDrawerContent';
 import GlobalShiftFooter from '../../components/GlobalShiftFooter';
 
 export default function DrawerLayout() {
-  const pathname = usePathname();
   
   return (
-    <View 
-        style={{ flex: 1, position: 'relative' }} 
-        key={Platform.OS === 'web' ? 'drawer-root' : undefined}
-    >
+    <View style={{ flex: 1, position: 'relative' }}>
         <Drawer
             drawerContent={(props) => <CustomDrawerContent {...props} />}
             screenOptions={{

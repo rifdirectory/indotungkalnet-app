@@ -78,7 +78,7 @@ export default function InventoryMovementsPage() {
 
     return (
         <Box sx={{ p: { xs: 3, md: 5 } }}>
-            <Portal>
+            <Portal container={typeof document !== 'undefined' ? document.getElementById('header-actions-portal') : null}>
                 <Stack direction="row" spacing={2} alignItems="center">
                     <FormControl size="small" sx={{ minWidth: 150 }}>
                         <Select

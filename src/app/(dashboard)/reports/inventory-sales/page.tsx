@@ -69,7 +69,7 @@ export default function InventorySalesReportPage() {
 
     return (
         <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
-            <Portal>
+            <Portal container={typeof document !== 'undefined' ? document.getElementById('header-actions-portal') : null}>
                 <Button variant="outlined" startIcon={<DownloadIcon />} sx={{ borderRadius: 2, fontWeight: 700, py: 0.5 }} size="small">Export CSV</Button>
             </Portal>
 

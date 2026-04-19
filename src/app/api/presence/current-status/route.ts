@@ -22,18 +22,7 @@ const getJakartaDate = () => {
     }).format(new Date());
 };
 
-const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
 
-export async function OPTIONS() {
-    return new NextResponse(null, {
-        status: 204,
-        headers: corsHeaders
-    });
-}
 
 export async function GET(req: Request) {
     try {
@@ -41,7 +30,7 @@ export async function GET(req: Request) {
         const employee_id = searchParams.get('employee_id');
 
         if (!employee_id) {
-            return NextResponse.json({ success: false, message: 'Employee ID required' }, { status: 400, headers: corsHeaders });
+            return NextResponse.json({ success: false, message: 'Employee ID required' }, { status: 400 });
         }
 
         const jakartaDate = getJakartaDate();
@@ -152,10 +141,10 @@ export async function GET(req: Request) {
                 is_off_schedule: isOffSchedule,
                 attendance_type: emp.attendance_type || 'office'
             }
-        }, { status: 200, headers: corsHeaders });
+        }, { status: 200 });
 
     } catch (error: any) {
         console.error('[Presence] Status API Error:', error);
-        return NextResponse.json({ success: false, message: error.message }, { status: 500, headers: corsHeaders });
+        return NextResponse.json({ success: false, message: error.message }, { status: 500 });
     }
 }

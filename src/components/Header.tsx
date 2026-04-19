@@ -7,7 +7,7 @@ import {
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
-const HeaderContent = dynamic(() => import('./HeaderContent'), { ssr: false });
+import HeaderContent from './HeaderContent';
 
 export function Header() {
   const router = useRouter();

@@ -47,6 +47,7 @@ export default function MyTasksScreen() {
   const [range, setRange] = useState<'today' | 'month' | 'custom'>('today');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const fetchTasks = async (idToUse?: string, tabOverride?: string, rangeOverride?: string) => {
     const id = idToUse || userId;
@@ -230,22 +231,39 @@ export default function MyTasksScreen() {
 
                 {range === 'custom' && (
                     <View className="flex-row mt-4 space-x-2">
-                        <View className="flex-1 bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl flex-row items-center">
-                            <Calendar size={14} color="#94a3b8" />
+                        <View className={`flex-1 border px-4 py-2 rounded-xl flex-row items-center transition-all ${focusedField === 'start' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+                            <Calendar size={14} color={focusedField === 'start' ? "#3b82f6" : "#94a3b8"} />
                             <TextInput 
+                                placeholder={focusedField === 'start' ? "" : "Start"}
+                                placeholderTextColor="#94a3b8"
+                                onFocus={() => setFocusedField('start')}
+                                onBlur={() => setFocusedField(null)}
+                                autoCorrect={false}
+                                autoComplete="off"
+                                textContentType="none"
+                                importantForAutofill="no"
+                                spellCheck={false}
                                 value={startDate}
                                 onChangeText={setStartDate}
-                                className="ml-2 text-[11px] font-bold text-slate-800"
-                                placeholder="Start"
+                                className="ml-2 text-[11px] font-bold text-slate-800 flex-1 border-0 outline-none p-0 bg-transparent"
                             />
                         </View>
                         <View className="items-center justify-center"><Text className="text-slate-300">-</Text></View>
-                        <View className="flex-1 bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl flex-row items-center">
-                             <Calendar size={14} color="#94a3b8" />
+                        <View className={`flex-1 border px-4 py-2 rounded-xl flex-row items-center transition-all ${focusedField === 'end' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+                             <Calendar size={14} color={focusedField === 'end' ? "#3b82f6" : "#94a3b8"} />
                             <TextInput 
+                                placeholder={focusedField === 'end' ? "" : "End"}
+                                placeholderTextColor="#94a3b8"
+                                onFocus={() => setFocusedField('end')}
+                                onBlur={() => setFocusedField(null)}
+                                autoCorrect={false}
+                                autoComplete="off"
+                                textContentType="none"
+                                importantForAutofill="no"
+                                spellCheck={false}
                                 value={endDate}
                                 onChangeText={setEndDate}
-                                className="ml-2 text-[11px] font-bold text-slate-800"
+                                className="ml-2 text-[11px] font-bold text-slate-800 flex-1 border-0 outline-none p-0 bg-transparent"
                                 placeholder="End"
                             />
                         </View>

@@ -78,3 +78,10 @@ export const formatToJakartaDateTime = (date: string | Date) => {
   
   return `${dateStr} ${find('hour')}:${find('minute')}`;
 };
+
+export const getRomanMonth = (date: Date = new Date()): string => {
+    const months = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+    // Use Jakarta time to get the month
+    const month = parseInt(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', month: 'numeric' }).format(date));
+    return months[month - 1];
+};

@@ -7,7 +7,7 @@ import {
   Chip, TextField, InputAdornment, Grid, Paper, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, FormControl,
   InputLabel, Select, MenuItem, CircularProgress, Snackbar, Alert,
-  Menu, Divider, Tabs, Tab, Checkbox, Autocomplete
+  Menu, Divider, Tabs, Tab, Checkbox, Autocomplete, Skeleton
 } from "@mui/material";
 import { 
   Inventory as InventoryIcon,
@@ -40,17 +40,30 @@ const getJakartaToday = () => {
 
 import Link from 'next/link';
 import Portal from '@/components/Portal';
+import AssetAssignment from '@/components/inventory/AssetAssignment';
+import SalesHistory from '@/components/inventory/SalesHistory';
+import { logActivity } from '@/lib/audit';
 import LogisticsInvoicing from '@/components/inventory/LogisticsInvoicing';
+import SalesPOS from '@/components/inventory/SalesPOS';
+import ReceivableDashboard from '@/components/inventory/ReceivableDashboard';
+import { useSearchParams } from 'next/navigation';
 
 export default function InventoryPage() {
   const theme = useTheme();
-  const [activeTab, setActiveTab] = useState(0); // 0: Katalog & Stok, 1: Tagihan Bulanan
+  const searchParams = useSearchParams();
+  const view = searchParams.get('view') || 'stock';
   
+  // Internal state for inventory sub-tabs (only for stock/assets view)
+  const [activeTab, setActiveTab] = useState(0);
+
+  useEffect(() => {
+    if (view === 'assets') setActiveTab(1);
+    else if (view === 'stock') setActiveTab(0);
+  }, [view]);
+
   // State
   const [items, setItems] = useState<any[]>([]);
-  const [pendingReceipts, setPendingReceipts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingReceipts, setLoadingReceipts] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', type: 'success' as 'success' | 'error' });
   
@@ -122,49 +135,20 @@ export default function InventoryPage() {
     } catch (err) {}
   };
 
-  const fetchReceipts = async () => {
-    setLoadingReceipts(true);
-    try {
-        const res = await fetch('/api/inventory/receipts');
-        const data = await res.json();
-        if (data.success) setPendingReceipts(data.data);
-    } catch (err) {
-        console.error(err);
-    } finally {
-        setLoadingReceipts(false);
-    }
-  };
 
-  const handleConfirmReceipt = async (logId: number) => {
-    if (!confirm('Apakah anda yakin barang fisik sudah diterima dengan benar? \nStok gudang akan langsung bertambah.')) return;
-    
-    try {
-        const res = await fetch('/api/inventory/receipts', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: logId, user: 'Admin' })
-        });
-        const data = await res.json();
-        if (data.success) {
-            setSnackbar({ open: true, message: data.message, type: 'success' });
-            fetchReceipts();
-            fetchItems();
-        } else {
-            throw new Error(data.message);
-        }
-    } catch (err: any) {
-        setSnackbar({ open: true, message: err.message, type: 'error' });
-    }
-  };
 
-  useEffect(() => {
-    fetchItems();
-    fetchCustomers();
-    fetchTickets();
-    fetchCategories();
-    fetchLocations();
-    fetchReceipts();
-  }, []);
+    useEffect(() => {
+      const handleRefresh = () => fetchItems();
+      window.addEventListener('inventory-updated', handleRefresh);
+      
+      fetchItems();
+      fetchCustomers();
+      fetchTickets();
+      fetchCategories();
+      fetchLocations();
+
+      return () => window.removeEventListener('inventory-updated', handleRefresh);
+    }, []);
 
   const handleSaveItem = async () => {
     try {
@@ -287,7 +271,7 @@ export default function InventoryPage() {
             setSnackbar({ open: true, message: 'Pengeluaran barang berhasil dicatat & disinkronkan', type: 'success' });
             setOpenOutgoing(false);
             setSelectedItem(null);
-            setAdjustment({ type: 'OUT', quantity: 1, sale_price: 0, purchase_price: 0, notes: '', reference_id: '', scenario: 'SALE_CASH', entity_id: '', ticket_id: '', due_date: '', transaction_date: getJakartaToday(), trx_unit: '', trx_factor: 1 } as any);
+            setAdjustment({ type: 'OUT', quantity: 1, sale_price: 0, purchase_price: 0, notes: '', reference_id: '', scenario: 'SALE_CASH', entity_id: '', ticket_id: '', due_date: '', transaction_date: getJakartaToday(), trx_unit: '', trx_factor: 1, capitalization_useful_life: 60 } as any);
             fetchItems();
         } else {
             throw new Error(data.message);
@@ -313,178 +297,207 @@ export default function InventoryPage() {
   return (
     <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
       <Portal>
-        <Stack direction="row" justifyContent="flex-end" spacing={1.5}>
-          <Button 
-            onClick={fetchItems}
-            sx={{ 
-              borderRadius: 3, 
-              fontWeight: 800, 
-              px: 2,
-              bgcolor: alpha(theme.palette.primary.main, 0.05),
-              color: 'primary.main',
-              '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.1) }
-            }}
-          >
-            <SyncIcon sx={{ mr: 1, fontSize: 18 }} /> Refresh
-          </Button>
-          
-          <Button 
-            onClick={() => {
-              setAdjustment({ type: 'OUT', quantity: 1, sale_price: 0, purchase_price: 0, notes: '', reference_id: '', scenario: 'SALE_CASH', entity_id: '', ticket_id: '', due_date: '', transaction_date: getJakartaToday() } as any);
-              setOpenOutgoing(true);
-            }}
-            sx={{ 
-              borderRadius: 3, 
-              fontWeight: 800, 
-              px: 2,
-              bgcolor: alpha(theme.palette.error.main, 0.05),
-              color: 'error.main',
-              '&:hover': { bgcolor: alpha(theme.palette.error.main, 0.1) }
-            }}
-          >
-            <OutIcon sx={{ mr: 1, fontSize: 18 }} /> Pengeluaran
-          </Button>
+        {view === 'stock' && (
+          <Stack direction="row" justifyContent="flex-end" spacing={1.5}>
+            <Button 
+              onClick={fetchItems}
+              sx={{ 
+                borderRadius: 3, 
+                fontWeight: 800, 
+                px: 2,
+                bgcolor: alpha(theme.palette.primary.main, 0.05),
+                color: 'primary.main',
+                '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.1) }
+              }}
+            >
+              <SyncIcon sx={{ mr: 1, fontSize: 18 }} /> Refresh
+            </Button>
+            
+            <Button 
+              onClick={() => {
+                setAdjustment({ type: 'OUT', quantity: 1, sale_price: 0, purchase_price: 0, notes: '', reference_id: '', scenario: 'SALE_CASH', entity_id: '', ticket_id: '', due_date: '', transaction_date: getJakartaToday() } as any);
+                setOpenOutgoing(true);
+              }}
+              sx={{ 
+                borderRadius: 3, 
+                fontWeight: 800, 
+                px: 2,
+                bgcolor: alpha(theme.palette.error.main, 0.05),
+                color: 'error.main',
+                '&:hover': { bgcolor: alpha(theme.palette.error.main, 0.1) }
+              }}
+            >
+              <OutIcon sx={{ mr: 1, fontSize: 18 }} /> Pengeluaran
+            </Button>
 
-          <Button 
-            onClick={() => {
-              setAdjustment({ type: 'IN', quantity: 1, sale_price: 0, purchase_price: 0, notes: '', reference_id: '', transaction_date: getJakartaToday() });
-              setOpenIncoming(true);
-            }}
-            sx={{ 
-              borderRadius: 3, 
-              fontWeight: 800, 
-              px: 2,
-              bgcolor: alpha(theme.palette.success.main, 0.05),
-              color: 'success.main',
-              '&:hover': { bgcolor: alpha(theme.palette.success.main, 0.1) }
-            }}
-          >
-            <InIcon sx={{ mr: 1, fontSize: 18 }} /> Penerimaan
-          </Button>
+            <Button 
+              onClick={() => {
+                setAdjustment({ type: 'IN', quantity: 1, sale_price: 0, purchase_price: 0, notes: '', reference_id: '', transaction_date: getJakartaToday() });
+                setOpenIncoming(true);
+              }}
+              sx={{ 
+                borderRadius: 3, 
+                fontWeight: 800, 
+                px: 2,
+                bgcolor: alpha(theme.palette.success.main, 0.05),
+                color: 'success.main',
+                '&:hover': { bgcolor: alpha(theme.palette.success.main, 0.1) }
+              }}
+            >
+              <InIcon sx={{ mr: 1, fontSize: 18 }} /> Penerimaan
+            </Button>
 
-          <Button 
-            variant="contained" 
-            onClick={() => {
-                setEditMode(false);
-                setSelectedItem(null);
-                setNewItem({ name: '', item_code: '', category: '', stock: 0, unit: 'Unit', min_stock: 5, price: 0, purchase_price: 0, location: 'Gudang Utama', postel_number: '', conversion_factor: 1, secondary_unit: '', track_sn: false });
-                setOpenAdd(true);
-            }}
-            sx={{ 
-              borderRadius: 3, 
-              px: 3, 
-              py: 1, 
-              fontWeight: 900, 
-              boxShadow: '0 8px 16px ' + alpha(theme.palette.primary.main, 0.2),
-              '&:hover': { boxShadow: '0 12px 20px ' + alpha(theme.palette.primary.main, 0.3) }
-            }}
-          >
-            <AddIcon sx={{ mr: 1 }} /> Tambah Katalog
-          </Button>
-        </Stack>
+            <Button 
+              variant="contained" 
+              onClick={() => {
+                  setEditMode(false);
+                  setSelectedItem(null);
+                  setNewItem({ name: '', item_code: '', category: '', stock: 0, unit: 'Unit', min_stock: 5, price: 0, purchase_price: 0, location: 'Gudang Utama', postel_number: '', conversion_factor: 1, secondary_unit: '', track_sn: false });
+                  setOpenAdd(true);
+              }}
+              sx={{ 
+                borderRadius: 3, 
+                px: 3, 
+                py: 1, 
+                fontWeight: 900, 
+                boxShadow: '0 8px 16px ' + alpha(theme.palette.primary.main, 0.2),
+                '&:hover': { boxShadow: '0 12px 20px ' + alpha(theme.palette.primary.main, 0.3) }
+              }}
+            >
+              <AddIcon sx={{ mr: 1 }} /> Tambah Katalog
+            </Button>
+          </Stack>
+        )}
       </Portal>
 
-      {/* Tabs Navigation */}
-      <Tabs 
-        value={activeTab} 
-        onChange={(_, v) => setActiveTab(v)} 
-        sx={{ 
-          mb: 4, 
-          borderBottom: '1px solid', 
-          borderColor: 'divider',
-          '& .MuiTab-root': { fontWeight: 800, textTransform: 'none', minWidth: 150, fontSize: '0.95rem' }
-        }}
-      >
-        <Tab label="Katalog & Stok" />
-        <Tab label="Tagihan Bulanan" />
-        <Tab label={
-            <Stack direction="row" alignItems="center" spacing={1}>
-                <span>Penerimaan Barang</span>
-                {pendingReceipts.length > 0 && (
-                    <Chip label={pendingReceipts.length} size="small" color="error" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 900 }} />
-                )}
-            </Stack>
-        } />
-      </Tabs>
+      {/* Tabs Navigation (Only for Inventory context) */}
+      {(view === 'stock' || view === 'assets') && (
+        <Tabs 
+          value={activeTab} 
+          onChange={(_, v) => setActiveTab(v)} 
+          sx={{ 
+            mb: 4, 
+            borderBottom: '1px solid', 
+            borderColor: 'divider',
+            '& .MuiTab-root': { fontWeight: 800, textTransform: 'none', minWidth: 150, fontSize: '0.95rem' }
+          }}
+        >
+          <Tab label="Katalog & Stok" />
+          <Tab label="Aset di Pelanggan" />
+        </Tabs>
+      )}
 
-      {activeTab === 0 && (
+      {(view === 'stock' || view === 'assets') && activeTab === 0 && (
         <>
-          {loading && items.length === 0 ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '40vh' }}>
-                <CircularProgress />
+
+        {loading && items.length === 0 ? (
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            {[1, 2, 3, 4].map((i) => (
+              <Grid key={i} size={{ xs: 12, sm: 6, md: 3 }}>
+                <Paper sx={{ p: 3, borderRadius: 5, border: '1px solid rgba(0,0,0,0.05)' }}>
+                  <Stack spacing={1}>
+                    <Skeleton variant="circular" width={40} height={40} />
+                    <Skeleton variant="text" sx={{ fontSize: '1rem', width: '60%' }} />
+                    <Skeleton variant="text" sx={{ fontSize: '1.5rem', width: '40%' }} />
+                  </Stack>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        ) : (
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            {stats.map((stat, idx) => {
+              const color = (theme.palette as any)[stat.color]?.main || theme.palette.primary.main;
+              return (
+                <Grid key={idx} size={{ xs: 12, sm: 6, md: 3 }}>
+                  <Paper sx={{ 
+                      p: 3, 
+                      borderRadius: 5, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 2.5, 
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+                      border: '1px solid',
+                      borderColor: alpha(color, 0.1),
+                      bgcolor: alpha(color, 0.02)
+                  }}>
+                    <Avatar sx={{ 
+                        bgcolor: alpha(color, 0.1), 
+                        color: color, 
+                        width: 60, 
+                        height: 60,
+                        borderRadius: 3
+                    }}>
+                      {stat.icon}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{stat.label}</Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 900 }}>{stat.value}</Typography>
+                    </Box>
+                  </Paper>
+                </Grid>
+              );
+            })}
+          </Grid>
+        )}
+
+        {/* Search Bar Skeleton / Table Skeleton */}
+        {loading && items.length === 0 ? (
+          <Card sx={{ borderRadius: 5, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', mb: 3 }}>
+             <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
+                <Skeleton variant="rectangular" height={40} sx={{ borderRadius: 4 }} />
+             </Box>
+             <TableContainer>
+                <Table>
+                    <TableBody>
+                        {[1, 2, 3, 4, 5].map((i) => (
+                            <TableRow key={i}>
+                                <TableCell sx={{ pl: 4 }}><Skeleton variant="rectangular" height={30} /></TableCell>
+                                <TableCell><Skeleton variant="rectangular" height={20} /></TableCell>
+                                <TableCell><Skeleton variant="rectangular" height={20} width={60} /></TableCell>
+                                <TableCell><Skeleton variant="rectangular" height={20} /></TableCell>
+                                <TableCell><Skeleton variant="rectangular" height={20} /></TableCell>
+                                <TableCell align="center" sx={{ pr: 4 }}><Skeleton variant="circular" width={30} height={30} /></TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+          </Card>
+        ) : (
+          <Card sx={{ borderRadius: 5, boxShadow: '0 8px 32px rgba(0,0,0,0.04)', overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+            <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', gap: 2, alignItems: 'center', bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
+              <TextField
+                placeholder="Cari barang, kategori, atau lokasi..."
+                size="small"
+                fullWidth
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                sx={{ '& .MuiOutlinedInput-root': { borderRadius: 4, bgcolor: 'background.paper' } }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon color="disabled" />
+                    </InputAdornment>
+                  ),
+                }}
+              />
             </Box>
-          ) : (
-            <>
-              {/* Stats Board */}
-              <Grid container spacing={3} sx={{ mb: 4 }}>
-        {stats.map((stat, idx) => {
-          const color = (theme.palette as any)[stat.color]?.main || theme.palette.primary.main;
-          return (
-            <Grid key={idx} item xs={12} sm={6} md={3}>
-              <Paper sx={{ 
-                  p: 3, 
-                  borderRadius: 5, 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 2.5, 
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
-                  border: '1px solid',
-                  borderColor: alpha(color, 0.1),
-                  bgcolor: alpha(color, 0.02)
-              }}>
-                <Avatar sx={{ 
-                    bgcolor: alpha(color, 0.1), 
-                    color: color, 
-                    width: 60, 
-                    height: 60,
-                    borderRadius: 3
-                }}>
-                  {stat.icon}
-                </Avatar>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{stat.label}</Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 900 }}>{stat.value}</Typography>
-                </Box>
-              </Paper>
-            </Grid>
-          );
-        })}
-      </Grid>
 
-      {/* Items Table */}
-      <Card sx={{ borderRadius: 5, boxShadow: '0 8px 32px rgba(0,0,0,0.04)', overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
-        <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', gap: 2, alignItems: 'center', bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
-          <TextField
-            placeholder="Cari barang, kategori, atau lokasi..."
-            size="small"
-            fullWidth
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            sx={{ '& .MuiOutlinedInput-root': { borderRadius: 4, bgcolor: 'background.paper' } }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="disabled" />
-                </InputAdornment>
-              ),
-            }}
-          />
-        </Box>
-
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
-                <TableCell sx={{ fontWeight: 900, pl: 4 }}>DATA BARANG</TableCell>
-                <TableCell sx={{ fontWeight: 900 }}>KATEGORI</TableCell>
-                <TableCell sx={{ fontWeight: 900 }}>STOK SAAT INI</TableCell>
-                <TableCell sx={{ fontWeight: 900 }}>HARGA KEUANGAN</TableCell>
-                <TableCell sx={{ fontWeight: 900 }}>LOKASI</TableCell>
-                <TableCell sx={{ fontWeight: 900 }}>STATUS</TableCell>
-                <TableCell sx={{ fontWeight: 900, pr: 4 }} align="right">AKSI CEPAT</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
+                    <TableCell sx={{ fontWeight: 900, pl: 4 }}>DATA BARANG</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>KATEGORI</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>STOK SAAT INI</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>HARGA KEUANGAN</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>LOKASI</TableCell>
+                    <TableCell sx={{ fontWeight: 900 }}>STATUS</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 900, fontSize: '0.75rem', color: 'text.secondary', pr: 4 }}>AKSI CEPAT</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
               {filteredItems.map((item) => (
                 <TableRow key={item.id} hover>
                   <TableCell sx={{ pl: 4 }}>
@@ -596,8 +609,36 @@ export default function InventoryPage() {
           </Table>
         </TableContainer>
       </Card>
+          )}
+        </>
+      )}
 
-      {/* Dialog: Add/Edit Item */}
+      {(view === 'stock' || view === 'assets') && activeTab === 1 && (
+        <ReceivableDashboard />
+      )}
+
+      {view === 'billing' && (
+        <LogisticsInvoicing customers={customers} />
+      )}
+
+      {view === 'invoices' && (
+        <SalesHistory />
+      )}
+
+
+
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={4000} 
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert severity={snackbar.type} sx={{ width: '100%', borderRadius: 3, fontWeight: 700 }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
+      {/* Common Dialogs moved to global scope */}
       <Dialog open={openAdd} onClose={() => { setOpenAdd(false); setEditMode(false); }} fullWidth maxWidth="sm">
           <DialogTitle sx={{ fontWeight: 900 }}>{editMode ? 'Edit Informasi Katalog' : 'Tambah Barang Baru'}</DialogTitle>
           <DialogContent>
@@ -903,6 +944,7 @@ export default function InventoryPage() {
                           <MenuItem value="SALE_CASH">Penjualan Tunai (Uang Masuk Kas)</MenuItem>
                           <MenuItem value="SALE_DEBT">Penjualan Hutang (Masuk Piutang)</MenuItem>
                           <MenuItem value="TICKET">Pemakaian Lapangan (Maintenance/Tiket)</MenuItem>
+                          <MenuItem value="CAPITALIZE">Jadikan Aset Infrastruktur (Aktiva Tetap)</MenuItem>
                       </Select>
                   </FormControl>
 
@@ -944,15 +986,28 @@ export default function InventoryPage() {
                                 />
                             </Grid>
                             <Grid size={{ xs: 6 }}>
-                                <TextField 
-                                    fullWidth 
-                                    label={adjustment.scenario === 'TICKET' ? 'Sifat Biaya' : 'Harga Jual Unit'} 
-                                    type="number" 
-                                    disabled={adjustment.scenario === 'TICKET'}
-                                    value={adjustment.scenario === 'TICKET' ? 0 : adjustment.sale_price} 
-                                    onChange={(e) => setAdjustment({...adjustment, sale_price: Number(e.target.value)} as any)} 
-                                />
-                            </Grid>
+                                    <TextField 
+                                        fullWidth 
+                                        label={adjustment.scenario === 'TICKET' ? 'Sifat Biaya' : (adjustment.scenario === 'CAPITALIZE' ? 'Nilai Kapitalisasi' : 'Harga Jual Unit')} 
+                                        type="number" 
+                                        disabled={adjustment.scenario === 'TICKET' || adjustment.scenario === 'CAPITALIZE'}
+                                        value={adjustment.scenario === 'TICKET' ? 0 : (adjustment.scenario === 'CAPITALIZE' ? (selectedItem.purchase_price * (adjustment.quantity || 1)) : adjustment.sale_price)} 
+                                        onChange={(e) => setAdjustment({...adjustment, sale_price: Number(e.target.value)} as any)} 
+                                    />
+                                </Grid>
+
+                                {adjustment.scenario === 'CAPITALIZE' && (
+                                    <Grid size={{ xs: 12 }}>
+                                        <TextField 
+                                            fullWidth 
+                                            label="Masa Manfaat (Bulan)" 
+                                            type="number" 
+                                            helperText="Contoh: 60 (5 Tahun). Digunakan untuk hitung penyusutan."
+                                            value={(adjustment as any).capitalization_useful_life || 60} 
+                                            onChange={(e) => setAdjustment({...adjustment, capitalization_useful_life: Number(e.target.value)} as any)} 
+                                        />
+                                    </Grid>
+                                )}
 
                              {(adjustment.scenario === 'SALE_DEBT' || adjustment.scenario === 'SALE_CASH') && (
                                 <Grid size={{ xs: 12 }}>
@@ -1027,93 +1082,6 @@ export default function InventoryPage() {
               </Button>
           </DialogActions>
       </Dialog>
-            </>
-          )}
-        </>
-      )}
-
-      {activeTab === 1 && (
-        <LogisticsInvoicing customers={customers} />
-      )}
-
-      {activeTab === 2 && (
-        <Box>
-            <Typography variant="h6" sx={{ fontWeight: 900, mb: 1 }}>Antrean Penerimaan Barang</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-                Daftar barang yang sudah dibayar oleh Keuangan namun belum diterima secara fisik oleh tim Logistik.
-            </Typography>
-
-            <Card sx={{ borderRadius: 5, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
-                <TableContainer>
-                    <Table>
-                        <TableHead sx={{ bgcolor: alpha(theme.palette.error.main, 0.03) }}>
-                            <TableRow>
-                                <TableCell sx={{ fontWeight: 900, pl: 4 }}>TANGGAL BELI</TableCell>
-                                <TableCell sx={{ fontWeight: 900 }}>BARANG</TableCell>
-                                <TableCell sx={{ fontWeight: 900 }}>JUMLAH</TableCell>
-                                <TableCell sx={{ fontWeight: 900 }}>REF / VOUCHER</TableCell>
-                                <TableCell sx={{ fontWeight: 900 }}>KETERANGAN FINANCE</TableCell>
-                                <TableCell sx={{ fontWeight: 900, pr: 4 }} align="center">KONFIRMASI</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {loadingReceipts ? (
-                                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 10 }}><CircularProgress /></TableCell></TableRow>
-                            ) : pendingReceipts.map((log) => (
-                                <TableRow key={log.id} hover>
-                                    <TableCell sx={{ pl: 4, fontWeight: 700 }}>
-                                        {new Date(log.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Typography variant="body2" sx={{ fontWeight: 800 }}>{log.item_name}</Typography>
-                                        <Typography variant="caption" color="text.secondary">{log.item_code}</Typography>
-                                    </TableCell>
-                                    <TableCell sx={{ fontWeight: 900, color: 'primary.main' }}>
-                                        {log.quantity} {log.unit}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Chip label={log.reference_id} size="small" sx={{ fontWeight: 800, fontFamily: 'monospace' }} />
-                                    </TableCell>
-                                    <TableCell sx={{ fontStyle: 'italic', color: 'text.secondary', fontSize: '0.8rem' }}>
-                                        {log.notes}
-                                    </TableCell>
-                                    <TableCell align="center" sx={{ pr: 4 }}>
-                                        <Button 
-                                            variant="contained" 
-                                            size="small" 
-                                            color="success"
-                                            onClick={() => handleConfirmReceipt(log.id)}
-                                            sx={{ borderRadius: 2, fontWeight: 800, textTransform: 'none' }}
-                                        >
-                                            Terima Barang
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                            {!loadingReceipts && pendingReceipts.length === 0 && (
-                                <TableRow>
-                                    <TableCell colSpan={6} align="center" sx={{ py: 10 }}>
-                                        <Typography color="text.secondary">Tidak ada antrean penerimaan barang.</Typography>
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </TableContainer>
-            </Card>
-        </Box>
-      )}
-
-      <Snackbar 
-        open={snackbar.open} 
-        autoHideDuration={4000} 
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        <Alert severity={snackbar.type} sx={{ width: '100%', borderRadius: 3, fontWeight: 700 }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 }

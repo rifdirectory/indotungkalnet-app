@@ -3,6 +3,7 @@ import db from '@/lib/db';
 
 export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
     const type = searchParams.get('type'); // payable or receivable
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
@@ -10,9 +11,9 @@ export async function GET(request: Request) {
     let query = `
       SELECT d.*, 
              CASE 
-               WHEN d.entity_type = 'staff' THEN e.full_name
-               WHEN d.entity_type = 'vendor' THEN v.name
-               WHEN d.entity_type = 'customer' THEN c.full_name
+               WHEN d.entity_type = 'staff' AND e.full_name IS NOT NULL THEN e.full_name
+               WHEN d.entity_type = 'vendor' AND v.name IS NOT NULL THEN v.name
+               WHEN d.entity_type = 'customer' AND c.full_name IS NOT NULL THEN c.full_name
                ELSE d.title
              END as entity_name
       FROM debts d

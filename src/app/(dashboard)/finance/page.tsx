@@ -30,7 +30,9 @@ import {
   Select,
   CircularProgress,
   Tabs,
-  Tab
+  Tab,
+  Snackbar,
+  Alert
 } from "@mui/material";
 import { 
   TrendingUp as TrendingUpIcon, 
@@ -69,6 +71,9 @@ export default function FinanceDashboard() {
     description: ''
   });
   const [activeDebtTab, setActiveDebtTab] = useState(0);
+  
+  // Snackbar state
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
   const fetchData = () => {
     setLoading(true);
@@ -115,11 +120,9 @@ export default function FinanceDashboard() {
       });
       const data = await res.json();
       if (data.success) {
-        setOpenPaymentModal(false);
-        fetchData(); // Refresh
-        setPaymentData({ debt_id: '', amount: '', payment_date: new Date().toISOString().split('T')[0], description: '' });
+        setSnackbar({ open: true, message: 'Pembayaran berhasil disimpan', severity: 'success' });
       } else {
-        alert(data.message || 'Gagal menyimpan pembayaran');
+        setSnackbar({ open: true, message: data.message || 'Gagal menyimpan pembayaran', severity: 'error' });
       }
     } catch (err) {
       console.error(err);
@@ -134,7 +137,7 @@ export default function FinanceDashboard() {
 
   return (
     <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
-      <Portal>
+      <Portal container={typeof document !== 'undefined' ? document.getElementById('header-actions-portal') : null}>
         <Stack direction="row" justifyContent="flex-end" spacing={2}>
           <Button 
             variant="outlined" 
@@ -159,7 +162,11 @@ export default function FinanceDashboard() {
       {/* Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 5 }}>
         <Grid size={{ xs: 12, md: 3 }}>
-          <Card sx={{ p: 4, borderRadius: 4, height: '100%', position: 'relative', overflow: 'hidden' }}>
+          <Card sx={{ 
+            p: 4, borderRadius: 4, height: '100%', position: 'relative', overflow: 'hidden',
+            background: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.05)} 0%, ${alpha(theme.palette.success.main, 0.15)} 100%)`,
+            border: '1px solid', borderColor: alpha(theme.palette.success.main, 0.2)
+          }}>
             <Box sx={{ position: 'absolute', top: 0, right: 0, p: 2, opacity: 0.1 }}>
               <TrendingUpIcon sx={{ fontSize: 80, color: 'success.main' }} />
             </Box>
@@ -173,7 +180,11 @@ export default function FinanceDashboard() {
           </Card>
         </Grid>
         <Grid size={{ xs: 12, md: 3 }}>
-          <Card sx={{ p: 4, borderRadius: 4, height: '100%', position: 'relative', overflow: 'hidden' }}>
+          <Card sx={{ 
+            p: 4, borderRadius: 4, height: '100%', position: 'relative', overflow: 'hidden',
+            background: `linear-gradient(135deg, ${alpha(theme.palette.error.main, 0.05)} 0%, ${alpha(theme.palette.error.main, 0.15)} 100%)`,
+            border: '1px solid', borderColor: alpha(theme.palette.error.main, 0.2)
+          }}>
             <Box sx={{ position: 'absolute', top: 0, right: 0, p: 2, opacity: 0.1 }}>
               <TrendingDownIcon sx={{ fontSize: 80, color: 'error.main' }} />
             </Box>
@@ -187,7 +198,14 @@ export default function FinanceDashboard() {
           </Card>
         </Grid>
         <Grid size={{ xs: 12, md: 3 }}>
-          <Card sx={{ p: 4, borderRadius: 4, height: '100%', position: 'relative', overflow: 'hidden', bgcolor: stats.profit >= 0 ? alpha(theme.palette.primary.main, 1) : alpha(theme.palette.error.main, 0.8), color: 'white' }}>
+          <Card sx={{ 
+            p: 4, borderRadius: 4, height: '100%', position: 'relative', overflow: 'hidden', 
+            background: stats.profit >= 0 
+              ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)` 
+              : `linear-gradient(135deg, ${theme.palette.error.main} 0%, ${theme.palette.error.dark} 100%)`, 
+            color: 'white',
+            boxShadow: theme.shadows[4]
+          }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, textTransform: 'uppercase', mb: 1, opacity: 0.8 }}>Saldo Kas (P&L)</Typography>
             <Typography variant="h4" sx={{ fontWeight: 900 }}>{formatCurrency(stats.profit)}</Typography>
             <Box sx={{ mt: 2, p: 0.5, px: 1.5, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.2)', width: 'fit-content' }}>
@@ -408,6 +426,17 @@ export default function FinanceDashboard() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={6000} 
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%', borderRadius: 2, fontWeight: 700 }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

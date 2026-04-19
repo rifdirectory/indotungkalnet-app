@@ -37,6 +37,7 @@ export default function AddOvertimeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showTechModal, setShowTechModal] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     employee_id: '',
@@ -167,26 +168,42 @@ export default function AddOvertimeScreen() {
         <View className="flex-row space-x-4 mb-6">
             <View className="flex-1">
                 <Text className="text-gray-400 font-bold mb-3 uppercase tracking-widest text-[10px]">TANGGAL LEMBUR</Text>
-                <View className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex-row items-center">
-                    <Calendar size={18} color="#6b7280" />
+                <View className={`p-4 rounded-2xl border flex-row items-center transition-all ${focusedField === 'date' ? 'bg-white border-blue-500 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
+                    <Calendar size={18} color={focusedField === 'date' ? "#3b82f6" : "#6b7280"} />
                     <TextInput 
+                        placeholder={focusedField === 'date' ? "" : "YYYY-MM-DD"}
+                        placeholderTextColor="#94a3b8"
+                        onFocus={() => setFocusedField('date')}
+                        onBlur={() => setFocusedField(null)}
+                        autoCorrect={false}
+                        autoComplete="off"
+                        textContentType="none"
+                        importantForAutofill="no"
+                        spellCheck={false}
                         value={formData.date}
                         onChangeText={(t) => setFormData({ ...formData, date: t })}
-                        placeholder="YYYY-MM-DD"
-                        className="ml-3 font-bold text-gray-800 flex-1"
+                        className="ml-3 font-bold text-gray-800 flex-1 border-0 outline-none p-0 bg-transparent"
                     />
                 </View>
             </View>
             <View className="flex-1">
                 <Text className="text-gray-400 font-bold mb-3 uppercase tracking-widest text-[10px]">DURASI (MENIT)</Text>
-                <View className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex-row items-center">
-                    <Clock size={18} color="#6b7280" />
+                <View className={`p-4 rounded-2xl border flex-row items-center transition-all ${focusedField === 'duration' ? 'bg-white border-blue-500 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
+                    <Clock size={18} color={focusedField === 'duration' ? "#3b82f6" : "#6b7280"} />
                     <TextInput 
+                        placeholder={focusedField === 'duration' ? "" : "60"}
+                        placeholderTextColor="#94a3b8"
+                        onFocus={() => setFocusedField('duration')}
+                        onBlur={() => setFocusedField(null)}
+                        autoCorrect={false}
+                        autoComplete="off"
+                        textContentType="none"
+                        importantForAutofill="no"
+                        spellCheck={false}
                         value={formData.duration_minutes}
                         onChangeText={(t) => setFormData({ ...formData, duration_minutes: t })}
                         keyboardType="numeric"
-                        placeholder="60"
-                        className="ml-3 font-bold text-gray-800 flex-1"
+                        className="ml-3 font-bold text-gray-800 flex-1 border-0 outline-none p-0 bg-transparent"
                     />
                 </View>
             </View>
@@ -194,11 +211,19 @@ export default function AddOvertimeScreen() {
 
         {/* Task Description */}
         <Text className="text-gray-400 font-bold mb-3 uppercase tracking-widest text-[10px]">DESKRIPSI TUGAS</Text>
-        <View className="bg-gray-50 p-4 rounded-3xl border border-gray-100 mb-10 h-32">
+        <View className={`p-4 rounded-3xl border mb-10 h-32 transition-all ${focusedField === 'desc' ? 'bg-white border-blue-500 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
             <TextInput 
                 multiline
-                placeholder="Tuliskan detail tugas lembur di sini..."
-                className="font-medium text-gray-800 flex-1"
+                placeholder={focusedField === 'desc' ? "" : "Tuliskan detail tugas lembur di sini..."}
+                placeholderTextColor="#94a3b8"
+                onFocus={() => setFocusedField('desc')}
+                onBlur={() => setFocusedField(null)}
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
+                importantForAutofill="no"
+                spellCheck={false}
+                className="font-medium text-gray-800 flex-1 leading-5 border-0 outline-none p-0 bg-transparent"
                 textAlignVertical="top"
                 value={formData.task_desc}
                 onChangeText={(t) => setFormData({ ...formData, task_desc: t })}
@@ -239,11 +264,19 @@ export default function AddOvertimeScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <View className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex-row items-center mb-6">
-                    <Search size={20} color="#9ca3af" />
+                <View className={`p-4 rounded-2xl border flex-row items-center mb-6 transition-all ${focusedField === 'search' ? 'bg-white border-blue-500 shadow-sm' : 'bg-gray-50 border-gray-100'}`}>
+                    <Search size={20} color={focusedField === 'search' ? "#3b82f6" : "#9ca3af"} />
                     <TextInput 
-                        placeholder="Cari nama atau ID..."
-                        className="ml-3 font-medium text-gray-800 flex-1"
+                        placeholder={focusedField === 'search' ? "" : "Cari nama atau ID..."}
+                        placeholderTextColor="#94a3b8"
+                        onFocus={() => setFocusedField('search')}
+                        onBlur={() => setFocusedField(null)}
+                        autoCorrect={false}
+                        autoComplete="off"
+                        textContentType="none"
+                        importantForAutofill="no"
+                        spellCheck={false}
+                        className="ml-3 font-medium text-gray-800 flex-1 border-0 outline-none p-0 bg-transparent"
                         value={searchQuery}
                         onChangeText={handleSearch}
                     />

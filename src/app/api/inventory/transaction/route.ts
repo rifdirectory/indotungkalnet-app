@@ -30,7 +30,8 @@ export async function POST(req: Request) {
             item_id, type, quantity, sale_price, purchase_price, 
             scenario, entity_type, entity_id, ticket_id, due_date,
             transaction_date, reference_id, notes, user,
-            trx_unit, trx_factor, sn 
+            trx_unit, trx_factor, sn, 
+            capitalization_useful_life // Useful life in months if capitalizing
         } = body;
 
         if (!item_id || !type || !quantity) {
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
                 // Automation: Create Income Transaction (Category 11: Pendapatan Retail ITNET)
                 await db.query(
                     'INSERT INTO transactions (trx_date, type, category_id, amount, status, notes) VALUES (?, "income", 11, ?, "completed", ?)',
-                    [trxDate, totalAmount, `Penjualan Tunai: ${qty} ${trx_unit || ''} ${itemName}`]
+                    [trxDate, totalAmount, `Penjualan: ${itemName} (${qty} ${trx_unit || 'unit'})`]
                 );
             } 
             else if (scenario === 'SALE_DEBT' && totalAmount > 0) {
@@ -76,15 +77,43 @@ export async function POST(req: Request) {
                 // Sync to Finance: Create 'pending_payment' transaction (Category 11: Pendapatan)
                 await db.query(
                     'INSERT INTO transactions (trx_date, type, category_id, amount, status, debt_id, notes) VALUES (?, "income", 11, ?, "pending_payment", ?, ?)',
-                    [trxDate, totalAmount, finalDebtId, `[PIUTANG] Penjualan: ${qty} ${trx_unit || ''} ${itemName}`]
+                    [trxDate, totalAmount, finalDebtId, `Penjualan (Tempo): ${itemName} (${qty} ${trx_unit || 'unit'})`]
                 );
             }
 
             // AUTOMATED HPP (COGS): Record Expense for the cost of items sold
-            if (totalModal > 0 && (scenario === 'SALE_CASH' || scenario === 'SALE_DEBT' || scenario === 'TICKET')) {
+            if (totalModal > 0 && (scenario === 'SALE_CASH' || scenario === 'SALE_DEBT' || scenario === 'TICKET' || scenario === 'MAINTENANCE')) {
+                // Scenario CAPITALIZE is EXCLUDED here because it shifts to Assets, not Expense
                 await db.query(
                     'INSERT INTO transactions (trx_date, type, category_id, amount, status, notes) VALUES (?, "expense", 28, ?, "completed", ?)',
-                    [trxDate, totalModal, `[HPP] Modal ${scenario === 'TICKET' ? 'Pemakaian' : 'Penjualan'}: ${qty} ${trx_unit || ''} ${itemName}`]
+                    [trxDate, totalModal, `Modal Barang: ${itemName} (${qty} ${trx_unit || 'unit'})`]
+                );
+            }
+
+            // CAPITALIZATION: Convert Inventory to Fixed Assets
+            if (scenario === 'CAPITALIZE' && totalModal > 0) {
+                const [itemDetail]: any = await db.query('SELECT category FROM inventory_items WHERE id = ?', [item_id]);
+                const invCat = itemDetail[0]?.category;
+                
+                // Map Inventory Category to Fixed Asset Category
+                let assetCat = 'other';
+                if (['router', 'onu', 'sfp'].includes(invCat)) assetCat = 'equipment';
+                else if (invCat === 'cable') assetCat = 'infrastructure';
+
+                const usefulLife = capitalization_useful_life || 60; // Default 5 years
+
+                await db.query(
+                    'INSERT INTO fixed_assets (name, category, purchase_date, cost_price, current_value, useful_life_months, location, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    [
+                        `Aset: ${itemName} (${sn || ''})`,
+                        assetCat,
+                        trxDate,
+                        totalModal,
+                        totalModal, // Initial current_value = cost_price
+                        usefulLife,
+                        entity_name || 'Server Room',
+                        notes || `Kapitalisasi dari inventaris: ${qty} unit`
+                    ]
                 );
             }
         }

@@ -46,6 +46,7 @@ export default function PerformanceScreen() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -140,7 +141,12 @@ export default function PerformanceScreen() {
                       setSelectedDate(val);
                       setShowDatePicker(false);
                   }}
-                  className="bg-slate-100 p-2 rounded-xl w-full text-center font-bold"
+                  autoCorrect={false}
+                  autoComplete="off"
+                  textContentType="none"
+                  importantForAutofill="no"
+                  spellCheck={false}
+                  className="bg-slate-100 p-2 rounded-xl w-full text-center font-bold border-0 outline-none"
               />
               <TouchableOpacity onPress={() => setShowDatePicker(false)} className="mt-2">
                   <Text className="text-blue-600 font-bold">Selesai</Text>
@@ -174,12 +180,19 @@ export default function PerformanceScreen() {
         </View>
 
         {/* Search Bar */}
-        <View className="mt-4 flex-row items-center bg-slate-100 rounded-2xl px-4 py-2">
-            <Search size={18} color="#94a3b8" />
+        <View className={`mt-4 flex-row items-center rounded-2xl px-4 py-2 border transition-all ${focusedField === 'search' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-100 border-transparent'}`}>
+            <Search size={18} color={focusedField === 'search' ? "#3b82f6" : "#94a3b8"} />
             <TextInput
-                className="flex-1 ml-3 text-slate-700 font-medium py-1"
-                placeholder="Cari nama pegawai..."
+                className="flex-1 ml-3 text-slate-700 font-medium py-1 border-0 outline-none p-0 bg-transparent"
+                placeholder={focusedField === 'search' ? "" : "Cari nama pegawai..."}
                 placeholderTextColor="#94a3b8"
+                onFocus={() => setFocusedField('search')}
+                onBlur={() => setFocusedField(null)}
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
+                importantForAutofill="no"
+                spellCheck={false}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
             />
@@ -280,14 +293,22 @@ export default function PerformanceScreen() {
 
             {/* Expanded Notes Input */}
             {activeNotesId === emp.id && (
-                <View className="mt-4 p-4 bg-slate-50 rounded-3xl border border-slate-100">
+                <View className={`mt-4 p-4 rounded-3xl border transition-all ${focusedField === `notes-${emp.id}` ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
                     <TextInput
                         multiline
                         numberOfLines={3}
-                        placeholder="Apa yang terjadi hari ini? (Hadir tepat waktu, Sering main HP, dll)"
+                        placeholder={focusedField === `notes-${emp.id}` ? "" : "Apa yang terjadi hari ini? (Hadir tepat waktu, Sering main HP, dll)"}
+                        placeholderTextColor="#94a3b8"
+                        onFocus={() => setFocusedField(`notes-${emp.id}`)}
+                        onBlur={() => setFocusedField(null)}
+                        autoCorrect={false}
+                        autoComplete="off"
+                        textContentType="none"
+                        importantForAutofill="no"
+                        spellCheck={false}
                         value={tempNotes}
                         onChangeText={setTempNotes}
-                        className="text-slate-700 text-xs font-medium leading-5"
+                        className="text-slate-700 text-xs font-medium leading-5 border-0 outline-none p-0 bg-transparent"
                         textAlignVertical="top"
                     />
                     <TouchableOpacity 

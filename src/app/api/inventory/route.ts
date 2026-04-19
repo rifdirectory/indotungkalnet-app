@@ -5,7 +5,7 @@ import { logActivity } from '@/lib/audit';
 export async function GET() {
   try {
     const rows = await db.query(`
-      SELECT i.*, c.has_sn as category_has_sn 
+      SELECT i.*, c.has_sn as category_has_sn, c.asset_type as category_asset_type 
       FROM inventory_items i 
       LEFT JOIN inventory_categories c ON i.category = c.name 
       WHERE i.is_active = 1 

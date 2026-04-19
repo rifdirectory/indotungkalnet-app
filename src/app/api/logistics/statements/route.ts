@@ -8,7 +8,7 @@ export async function GET(req: Request) {
         const month = searchParams.get('month'); // YYYY-MM
 
         let query = `
-            SELECT ls.*, c.full_name as customer_name, c.customer_code
+            SELECT ls.*, c.full_name as customer_name
             FROM logistics_statements ls
             JOIN customers c ON ls.customer_id = c.id
         `;

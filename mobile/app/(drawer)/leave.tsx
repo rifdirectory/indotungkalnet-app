@@ -80,6 +80,7 @@ export default function LeaveScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     type: 'izin',
@@ -465,11 +466,19 @@ export default function LeaveScreen() {
                 )}
 
                 <Text className="text-slate-400 font-bold mb-4 uppercase tracking-widest text-[10px]">Alasan Permohonan</Text>
-                <View className="bg-slate-50 p-5 rounded-[32px] border border-slate-100 mb-10 h-40">
+                <View className={`p-5 rounded-[32px] border mb-10 h-40 transition-all ${focusedField === 'reason' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
                     <TextInput 
                         multiline
-                        placeholder="Tuliskan alasan lengkap permohonan Anda..."
-                        className="font-medium text-slate-800 flex-1 text-sm leading-5"
+                        placeholder={focusedField === 'reason' ? "" : "Tuliskan alasan lengkap permohonan Anda..."}
+                        placeholderTextColor="#94a3b8"
+                        onFocus={() => setFocusedField('reason')}
+                        onBlur={() => setFocusedField(null)}
+                        autoCorrect={false}
+                        autoComplete="off"
+                        textContentType="none"
+                        importantForAutofill="no"
+                        spellCheck={false}
+                        className="font-medium text-slate-800 flex-1 text-sm leading-5 border-0 outline-none p-0 bg-transparent"
                         textAlignVertical="top"
                         value={formData.reason}
                         onChangeText={(t) => setFormData({ ...formData, reason: t })}

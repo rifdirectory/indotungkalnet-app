@@ -39,6 +39,7 @@ export default function TicketListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const fetchTickets = async () => {
     try {
@@ -108,11 +109,19 @@ export default function TicketListScreen() {
 
       <View className="px-6 py-4">
         {/* Search Bar */}
-        <View className="flex-row items-center bg-slate-100 rounded-2xl px-4 py-3 mb-4">
-          <Search size={18} color="#94a3b8" />
+        <View className={`flex-row items-center rounded-2xl px-4 py-3 mb-4 border transition-all ${focusedField === 'search' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-100 border-transparent'}`}>
+          <Search size={18} color={focusedField === 'search' ? "#3b82f6" : "#94a3b8"} />
           <TextInput 
-            className="flex-1 ml-3 text-slate-700 font-medium"
-            placeholder="Cari ID, Pelanggan atau Masalah..."
+            className="flex-1 ml-3 text-slate-700 font-medium border-0 outline-none p-0 bg-transparent"
+            placeholder={focusedField === 'search' ? "" : "Cari ID, Pelanggan atau Masalah..."}
+            placeholderTextColor="#94a3b8"
+            onFocus={() => setFocusedField('search')}
+            onBlur={() => setFocusedField(null)}
+            autoCorrect={false}
+            autoComplete="off"
+            textContentType="none"
+            importantForAutofill="no"
+            spellCheck={false}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />

@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { logActivity } from '@/lib/audit';
+import { FINANCE_CONFIG } from '@/lib/constants';
+import { getSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const categoryId = searchParams.get('categoryId');
     const type = searchParams.get('type');
@@ -48,19 +55,21 @@ export async function GET(request: Request) {
     const getStats = searchParams.get('stats') === 'true';
     if (getStats) {
       // FIX [K-3]: Exclude void & void_reversal from all financial calculations
-      // Void = original voided transaction, void_reversal = the counter-entry (internal accounting only)
+      // Also filter by Revenue/Expense account groups to match the P&L report (excludes transfers)
       const statsQuery = `
         SELECT 
-          SUM(CASE WHEN type = 'income' AND status NOT IN ('void', 'void_reversal') THEN amount ELSE 0 END) as gross_income,
-          SUM(CASE WHEN type = 'income' AND status = 'completed' THEN amount ELSE 0 END) as cash_income,
-          SUM(CASE WHEN type = 'expense' AND status NOT IN ('void', 'void_reversal') THEN amount ELSE 0 END) as expense
-        FROM transactions
+          SUM(CASE WHEN c.account_group = 'revenue' AND t.status NOT IN ('void', 'void_reversal') THEN t.amount ELSE 0 END) as gross_income,
+          SUM(CASE WHEN c.account_group = 'revenue' AND t.status = 'completed' THEN t.amount ELSE 0 END) as cash_income,
+          SUM(CASE WHEN c.account_group = 'expense' AND t.status NOT IN ('void', 'void_reversal') THEN t.amount ELSE 0 END) as expense
+        FROM transactions t
+        LEFT JOIN finance_categories fc ON t.category_id = fc.id
+        LEFT JOIN chart_of_accounts c ON fc.coa_code = c.code
         WHERE 1=1
       `;
       const statsParams: any[] = [];
       let currentStatsQuery = statsQuery;
-      if (startDate) { currentStatsQuery += ' AND trx_date >= ?'; statsParams.push(startDate); }
-      if (endDate) { currentStatsQuery += ' AND trx_date <= ?'; statsParams.push(endDate); }
+      if (startDate) { currentStatsQuery += ' AND t.trx_date >= ?'; statsParams.push(startDate); }
+      if (endDate) { currentStatsQuery += ' AND t.trx_date <= ?'; statsParams.push(endDate); }
       
       const statsResult: any = await db.query(currentStatsQuery, statsParams);
       const debtResult: any = await db.query('SELECT SUM(total_amount - paid_amount) as debt FROM debts WHERE status = "active"');
@@ -82,7 +91,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
+    const currentUser = session.username || 'System';
     const { 
       trx_date, type, category_id, amount, notes, user, status,
       inventory_item_id, inventory_qty,
@@ -122,7 +137,7 @@ export async function POST(request: Request) {
         await db.query(
           `INSERT INTO transactions (trx_date, type, category_id, account_id, amount, notes, user, status, transfer_id) 
            VALUES (?, 'expense', ?, ?, ?, 'Biaya Admin Transfer', ?, 'completed', ?)`,
-          [trx_date, 31, account_id, numAdminFee, user || 'Admin', transferId]
+          [trx_date, FINANCE_CONFIG.BANK_ADMIN_FEE_CATEGORY_ID, account_id, numAdminFee, user || 'Admin', transferId]
         );
       }
 
@@ -138,7 +153,7 @@ export async function POST(request: Request) {
     const result: any = await db.query(
       `INSERT INTO transactions (trx_date, type, category_id, account_id, amount, notes, user, status) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [trx_date, type, category_id || null, account_id, amount, notes || null, user || 'Admin', status || 'completed']
+      [trx_date, type, category_id || null, account_id, amount, notes || null, user || currentUser, status || 'completed']
     );
 
     const transactionId = result.insertId;
@@ -186,7 +201,13 @@ export async function POST(request: Request) {
 // PATCH: Void a transaction (creates counter-entry for accounting integrity)
 export async function PATCH(request: Request) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
+    const currentUser = session.username || 'System';
     const { id, action, user } = body; // action: 'void'
 
     if (!id || action !== 'void') {
@@ -232,7 +253,7 @@ export async function PATCH(request: Request) {
     }
 
     await logActivity(
-      user || 'Admin',
+      user || currentUser,
       'UPDATE',
       'Finance',
       `TRX-${id}`,

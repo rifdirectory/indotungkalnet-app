@@ -4,6 +4,9 @@ import { logActivity } from '@/lib/audit';
 
 export async function GET() {
   try {
+    // Lazy Migration: Ensure asset_type column exists
+    await db.query(`ALTER TABLE inventory_categories ADD COLUMN IF NOT EXISTS asset_type ENUM('fixed', 'current') DEFAULT 'current'`);
+    
     const rows = await db.query('SELECT * FROM inventory_categories ORDER BY name ASC');
     return NextResponse.json({ success: true, data: rows });
   } catch (error) {
@@ -15,15 +18,15 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { name, description, has_sn, user } = body;
+    const { name, description, has_sn, asset_type, user } = body;
 
     if (!name) {
       return NextResponse.json({ success: false, message: 'Name is required' }, { status: 400 });
     }
 
     const result: any = await db.query(
-      'INSERT INTO inventory_categories (name, description, has_sn) VALUES (?, ?, ?)',
-      [name, description || null, has_sn ? 1 : 0]
+      'INSERT INTO inventory_categories (name, description, has_sn, asset_type) VALUES (?, ?, ?, ?)',
+      [name, description || null, has_sn ? 1 : 0, asset_type || 'current']
     );
 
     await logActivity(user || 'Admin', 'INSERT', 'InventoryConfig', `CAT-${result.insertId}`, { name });
@@ -38,15 +41,15 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, name, description, has_sn, user } = body;
+    const { id, name, description, has_sn, asset_type, user } = body;
 
     if (!id || !name) {
       return NextResponse.json({ success: false, message: 'ID and Name are required' }, { status: 400 });
     }
 
     await db.query(
-      'UPDATE inventory_categories SET name = ?, description = ?, has_sn = ? WHERE id = ?',
-      [name, description || null, has_sn ? 1 : 0, id]
+      'UPDATE inventory_categories SET name = ?, description = ?, has_sn = ?, asset_type = ? WHERE id = ?',
+      [name, description || null, has_sn ? 1 : 0, asset_type || 'current', id]
     );
 
     await logActivity(user || 'Admin', 'UPDATE', 'InventoryConfig', `CAT-${id}`, { name });

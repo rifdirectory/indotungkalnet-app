@@ -12,32 +12,30 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Fingerprint, Smartphone, User, Lock } from 'lucide-react-native';
-import * as SecureStore from '../utils/storage';
 import { API_URL } from '../services/api';
 import axios from 'axios';
+import { useUser } from '../context/UserContext';
 
 // Konfigurasi API - Sekarang diambil dari services/api.js
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { user, loading: contextLoading, login: contextLogin } = useUser();
   const [employeeCode, setEmployeeCode] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   useEffect(() => {
-    async function checkSession() {
-      const token = await SecureStore.getItemAsync('user_token');
-      if (token) {
-        router.replace('/(drawer)/home');
-      } else {
-        setChecking(false);
-      }
+    if (!contextLoading && user) {
+        // Beri sedikit jeda agar router web siap
+        setTimeout(() => {
+          router.replace('/(drawer)/home');
+        }, 100);
     }
-    checkSession();
-  }, []);
+  }, [user, contextLoading]);
 
-  if (checking) {
+  if (contextLoading) {
     return (
         <View className="flex-1 items-center justify-center bg-white">
             <ActivityIndicator size="large" color="#2563eb" />
@@ -59,15 +57,17 @@ export default function LoginScreen() {
       });
 
       if (response.data.success) {
-        // Simpan data user ke SecureStore
+        // Simpan data user ke Context
         const { full_name, position, id, is_pic, role } = response.data.data;
-        // SecureStore values must be strings!
-        await SecureStore.setItemAsync('user_name', full_name || '');
-        await SecureStore.setItemAsync('user_position', position || '');
-        await SecureStore.setItemAsync('user_id', String(id));
-        await SecureStore.setItemAsync('user_is_pic', is_pic ? 'true' : 'false');
-        await SecureStore.setItemAsync('user_role', role || 'employee');
-        await SecureStore.setItemAsync('user_token', response.data.token || '');
+        
+        await contextLogin({
+          name: full_name || '',
+          position: position || '',
+          id: String(id),
+          isPic: !!is_pic,
+          role: role || 'employee',
+          token: response.data.token || '',
+        });
         
         router.replace('/(drawer)/home');
       } else {
@@ -102,11 +102,19 @@ export default function LoginScreen() {
         <View className="space-y-4">
           <View>
             <Text className="text-gray-600 mb-2 font-medium ml-1">ID Pegawai</Text>
-            <View className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
-              <User size={20} color="#9ca3af" style={{ marginRight: 12 }} />
+            <View className={`flex-row items-center border rounded-2xl px-4 py-3 transition-all ${focusedField === 'id' ? 'bg-white border-blue-500 shadow-sm' : 'bg-gray-50 border-gray-200'}`}>
+              <User size={20} color={focusedField === 'id' ? "#2563eb" : "#9ca3af"} style={{ marginRight: 12 }} />
               <TextInput 
-                placeholder="001-2026-ITN"
-                className="flex-1 text-gray-800 font-medium"
+                placeholder={focusedField === 'id' ? "" : "001-2026-ITN"}
+                placeholderTextColor="#94a3af"
+                onFocus={() => setFocusedField('id')}
+                onBlur={() => setFocusedField(null)}
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
+                importantForAutofill="no"
+                spellCheck={false}
+                className="flex-1 text-gray-800 font-medium border-0 outline-none p-0 bg-transparent"
                 value={employeeCode}
                 onChangeText={setEmployeeCode}
                 autoCapitalize="characters"
@@ -116,11 +124,20 @@ export default function LoginScreen() {
 
           <View className="mt-4">
             <Text className="text-gray-600 mb-2 font-medium ml-1">Kata Sandi</Text>
-            <View className="flex-row items-center bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
-              <Lock size={20} color="#9ca3af" style={{ marginRight: 12 }} />
+            <View className={`flex-row items-center border rounded-2xl px-4 py-3 transition-all ${focusedField === 'pass' ? 'bg-white border-blue-500 shadow-sm' : 'bg-gray-50 border-gray-200'}`}>
+              <Lock size={20} color={focusedField === 'pass' ? "#2563eb" : "#9ca3af"} style={{ marginRight: 12 }} />
               <TextInput 
-                placeholder="Masukkan kata sandi"
-                className="flex-1 text-gray-800 font-medium"
+                placeholder={focusedField === 'pass' ? "" : "Masukkan kata sandi"}
+                placeholderTextColor="#94a3af"
+                onFocus={() => setFocusedField('pass')}
+                onBlur={() => setFocusedField(null)}
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
+                importantForAutofill="no"
+                spellCheck={false}
+                autoCapitalize="none"
+                className="flex-1 text-gray-800 font-medium border-0 outline-none p-0 bg-transparent"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={true}

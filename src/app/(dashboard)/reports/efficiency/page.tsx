@@ -70,7 +70,7 @@ export default function EfficiencyReportPage() {
 
   return (
     <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
-      <Portal>
+      <Portal container={typeof document !== 'undefined' ? document.getElementById('header-actions-portal') : null}>
         <Stack direction="row" spacing={2}>
             <TextField 
                 type="date" 

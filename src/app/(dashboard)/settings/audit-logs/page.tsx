@@ -89,7 +89,7 @@ export default function AuditLogsPage() {
                 Rekaman histori aksi administratif di seluruh sistem (Audit Trail).
             </Typography>
         </Box>
-        <Portal>
+        <Portal container={typeof document !== 'undefined' ? document.getElementById('header-actions-portal') : null}>
             <Button 
                 variant="outlined" 
                 startIcon={<HistoryIcon />} 

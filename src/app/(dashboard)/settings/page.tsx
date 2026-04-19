@@ -395,7 +395,37 @@ export default function SettingsPage() {
             }}>
               <Box>
                 <Typography variant="h6" sx={{ mb: 1, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <SecurityIcon color="primary" /> Keamanan & Audit
+                  <SecurityIcon color="primary" /> Hak Akses Menu
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Kelola menu apa saja yang bisa diakses oleh user/staf di aplikasi Web Dashboard maupun Aplikasi Mobile.
+                </Typography>
+              </Box>
+              <Button 
+                component={Link} 
+                href="/settings/permissions" 
+                variant="contained" 
+                fullWidth
+                sx={{ borderRadius: 2, py: 1.5, fontWeight: 800, textTransform: 'none' }}
+              >
+                Atur Hak Akses Menu
+              </Button>
+            </Card>
+
+            <Card sx={{ 
+              p: 4, 
+              borderRadius: 4, 
+              bgcolor: alpha('#64748b', 0.05), 
+              border: '1px solid', 
+              borderColor: alpha('#64748b', 0.1),
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              height: '100%'
+            }}>
+              <Box>
+                <Typography variant="h6" sx={{ mb: 1, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <SettingsIcon color="inherit" sx={{ color: '#64748b' }} /> Audit Logs
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                   Pantau riwayat aktivitas administratif, transaksi, dan perubahan data di seluruh sistem untuk akuntabilitas staf.
@@ -404,9 +434,9 @@ export default function SettingsPage() {
               <Button 
                 component={Link} 
                 href="/settings/audit-logs" 
-                variant="contained" 
+                variant="outlined" 
                 fullWidth
-                sx={{ borderRadius: 2, py: 1.5, fontWeight: 800, textTransform: 'none' }}
+                sx={{ borderRadius: 2, py: 1.5, fontWeight: 800, textTransform: 'none', color: '#64748b', borderColor: '#64748b' }}
               >
                 Buka Log Aktivitas
               </Button>

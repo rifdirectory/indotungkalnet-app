@@ -5,7 +5,7 @@ import {
   Box, Typography, Stack, Card, Table, TableBody, TableCell, 
   TableContainer, TableHead, TableRow, alpha, useTheme, Avatar, 
   TextField, Grid, Paper, IconButton, Button, Divider, Tabs, Tab,
-  Snackbar, Alert, Chip
+  Snackbar, Alert, Chip, MenuItem
 } from "@mui/material";
 import { 
   Inventory as InventoryIcon,
@@ -26,7 +26,7 @@ export default function MasterInventoryPage() {
   const [locations, setLocations] = useState<any[]>([]);
   const [openForm, setOpenForm] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
-  const [categoryForm, setCategoryForm] = useState({ name: '', description: '', has_sn: false });
+  const [categoryForm, setCategoryForm] = useState({ name: '', description: '', has_sn: false, asset_type: 'current' });
   const [openLocForm, setOpenLocForm] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [locForm, setLocForm] = useState({ name: '', address: '' });
@@ -67,7 +67,7 @@ export default function MasterInventoryPage() {
         const data = await res.json();
         if (data.success) {
             setSnackbar({ open: true, message: `Kategori berhasil ${selectedCategory ? 'diperbarui' : 'ditambahkan'}`, type: 'success' });
-            setCategoryForm({ name: '', description: '', has_sn: false });
+            setCategoryForm({ name: '', description: '', has_sn: false, asset_type: 'current' });
             setSelectedCategory(null);
             setOpenForm(false);
             fetchCategories();
@@ -153,7 +153,7 @@ export default function MasterInventoryPage() {
                     variant="contained" 
                     onClick={() => {
                         setSelectedCategory(null);
-                        setCategoryForm({ name: '', description: '', has_sn: false });
+                        setCategoryForm({ name: '', description: '', has_sn: false, asset_type: 'current' });
                         setOpenForm(true);
                     }}
                     startIcon={<AddIcon />}
@@ -169,6 +169,7 @@ export default function MasterInventoryPage() {
                         <TableRow>
                             <TableCell sx={{ fontWeight: 900, pl: 3 }}>KATEGORI</TableCell>
                             <TableCell sx={{ fontWeight: 900 }}>DESKRIPSI</TableCell>
+                            <TableCell sx={{ fontWeight: 900 }} align="center">KLASIFIKASI</TableCell>
                             <TableCell sx={{ fontWeight: 900 }} align="center">STATUS SN</TableCell>
                             <TableCell sx={{ fontWeight: 900, pr: 3 }} align="right">AKSI</TableCell>
                         </TableRow>
@@ -188,6 +189,15 @@ export default function MasterInventoryPage() {
                                     <Typography variant="body2" color="text.secondary">{cat.description || '-'}</Typography>
                                 </TableCell>
                                 <TableCell align="center">
+                                    <Chip 
+                                        label={cat.asset_type === 'fixed' ? 'AKTIVA TETAP' : 'AKTIVA LANCAR'} 
+                                        size="small" 
+                                        variant="outlined"
+                                        color={cat.asset_type === 'fixed' ? 'secondary' : 'default'}
+                                        sx={{ fontWeight: 900, borderRadius: 1.5, fontSize: '0.6rem' }} 
+                                    />
+                                </TableCell>
+                                <TableCell align="center">
                                     {cat.has_sn ? (
                                         <Chip 
                                             label="WAJIB SN" 
@@ -203,7 +213,12 @@ export default function MasterInventoryPage() {
                                     <Stack direction="row" spacing={1} justifyContent="flex-end">
                                         <IconButton size="small" onClick={() => { 
                                             setSelectedCategory(cat); 
-                                            setCategoryForm({ name: cat.name, description: cat.description || '', has_sn: !!cat.has_sn }); 
+                                            setCategoryForm({ 
+                                                name: cat.name, 
+                                                description: cat.description || '', 
+                                                has_sn: !!cat.has_sn,
+                                                asset_type: cat.asset_type || 'current'
+                                            }); 
                                             setOpenForm(true); 
                                         }} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
                                             <EditIcon fontSize="small" />
@@ -245,6 +260,16 @@ export default function MasterInventoryPage() {
                             value={categoryForm.description} 
                             onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})} 
                         />
+                        <TextField 
+                            select 
+                            fullWidth 
+                            label="Klasifikasi Aset" 
+                            value={categoryForm.asset_type} 
+                            onChange={(e) => setCategoryForm({...categoryForm, asset_type: e.target.value})}
+                        >
+                            <MenuItem value="current">Aktiva Lancar (Habis Pakai / HPP)</MenuItem>
+                            <MenuItem value="fixed">Aktiva Tetap (Perangkat Dipinjamkan)</MenuItem>
+                        </TextField>
                         <Paper 
                             elevation={0} 
                             onClick={() => setCategoryForm({...categoryForm, has_sn: !categoryForm.has_sn})}

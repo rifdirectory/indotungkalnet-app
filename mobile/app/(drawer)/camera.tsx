@@ -13,8 +13,9 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { X, Camera as CameraIcon, CheckCircle2, AlertCircle } from 'lucide-react-native';
 import { API_URL } from '../../services/api';
 import axios from 'axios';
+import Svg, { Rect, G, Path } from 'react-native-svg';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 type CameraStatus = 'initializing' | 'ready' | 'processing' | 'success' | 'error';
 
@@ -27,6 +28,8 @@ export default function CameraScreen() {
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [countdown, setCountdown] = useState(4); // 4 seconds fallback
   const [errorMessage, setErrorMessage] = useState('');
+  const [faceData, setFaceData] = useState<any>(null);
+  const [isLocked, setIsLocked] = useState(false);
   
   const cameraRef = useRef<any>(null);
   const isCapturing = useRef(false);
@@ -152,6 +155,8 @@ export default function CameraScreen() {
         if (permission?.granted) {
             setStatus('ready');
         }
+        setFaceData(null);
+        setIsLocked(false);
 
         return () => {
             if (faceDetectionTimer.current) clearTimeout(faceDetectionTimer.current);
@@ -163,19 +168,29 @@ export default function CameraScreen() {
 
   const handleFacesDetected = ({ faces }: any) => {
     // If not ready or already doing something, ignore
-    if (status !== 'ready' || isCapturing.current) return;
+    if (status !== 'ready' || isCapturing.current) {
+        setFaceData(null);
+        setIsLocked(false);
+        return;
+    }
 
     if (faces.length > 0) {
       const face = faces[0];
-      // Face must be large enough (at least 40% of screen width)
-      if (face.bounds.size.width > width * 0.4) {
+      setFaceData(face);
+
+      // Face must be large enough (at least 35% of screen width) and centered
+      const isCentered = Math.abs(face.bounds.origin.x + face.bounds.size.width / 2 - width / 2) < 50;
+      const isLargeEnough = face.bounds.size.width > width * 0.35;
+
+      if (isLargeEnough && isCentered) {
         if (!isFaceDetected) {
             setIsFaceDetected(true);
+            setIsLocked(true);
             // Schedule capture if face stays detected
             if (faceDetectionTimer.current) clearTimeout(faceDetectionTimer.current);
             faceDetectionTimer.current = setTimeout(() => {
                 takePicture();
-            }, 1000); // 1.0s for quicker response
+            }, 800); // 0.8s for quicker response in accurate mode
         }
         return;
       }
@@ -184,7 +199,11 @@ export default function CameraScreen() {
     // If no face or face too small/far
     if (isFaceDetected) {
         setIsFaceDetected(false);
+        setIsLocked(false);
         if (faceDetectionTimer.current) clearTimeout(faceDetectionTimer.current);
+    }
+    if (faces.length === 0) {
+        setFaceData(null);
     }
   };
 
@@ -230,13 +249,63 @@ export default function CameraScreen() {
         // @ts-ignore - Prop exists in library but may have type mismatch in local env
         onFacesDetected={handleFacesDetected}
         faceDetectorSettings={{
-          mode: 'fast',
-          detectLandmarks: 'none',
-          runClassifications: 'none',
+          mode: 'accurate',
+          detectLandmarks: 'all',
+          runClassifications: 'all',
           minDetectionInterval: 100,
           tracking: true,
         }}
       />
+
+      {/* Face Tracking Overlay */}
+      {faceData && status === 'ready' && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Svg height="100%" width="100%" viewBox={`0 0 ${width} ${height}`}>
+            <G 
+              x={faceData.bounds.origin.x} 
+              y={faceData.bounds.origin.y}
+            >
+              {/* Corner Brackets */}
+              <Path 
+                d={`M 0 20 L 0 0 L 20 0`} 
+                stroke={isLocked ? '#22c55e' : 'white'} 
+                strokeWidth="4" 
+                fill="none" 
+              />
+              <Path 
+                d={`M ${faceData.bounds.size.width - 20} 0 L ${faceData.bounds.size.width} 0 L ${faceData.bounds.size.width} 20`} 
+                stroke={isLocked ? '#22c55e' : 'white'} 
+                strokeWidth="4" 
+                fill="none" 
+              />
+              <Path 
+                d={`M 0 ${faceData.bounds.size.height - 20} L 0 ${faceData.bounds.size.height} L 20 ${faceData.bounds.size.height}`} 
+                stroke={isLocked ? '#22c55e' : 'white'} 
+                strokeWidth="4" 
+                fill="none" 
+              />
+              <Path 
+                d={`M ${faceData.bounds.size.width - 20} ${faceData.bounds.size.height} L ${faceData.bounds.size.width} ${faceData.bounds.size.height} L ${faceData.bounds.size.width} ${faceData.bounds.size.height - 20}`} 
+                stroke={isLocked ? '#22c55e' : 'white'} 
+                strokeWidth="4" 
+                fill="none" 
+              />
+              
+              {/* Target Scan Line */}
+              {!isLocked && (
+                <Rect 
+                  x="0" 
+                  y={faceData.bounds.size.height / 2} 
+                  width={faceData.bounds.size.width} 
+                  height="1" 
+                  fill="#ea580c" 
+                  opacity="0.5"
+                />
+              )}
+            </G>
+          </Svg>
+        </View>
+      )}
 
       {/* Overlay - Scanning Frame */}
       <View className="flex-1 items-center justify-center">

@@ -38,13 +38,15 @@ import {
   EventNote as ScheduleIcon,
   FactCheck as PresenceIcon,
   BarChart as AnalyticsIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  ShoppingCart as SalesIcon
 } from '@mui/icons-material';
 import { Collapse } from '@mui/material';
 
 const drawerWidth = 260;
 
 interface MenuItem {
+  key: string;
   icon: React.ReactNode;
   label: string;
   href: string;
@@ -54,9 +56,10 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { icon: <DashboardIcon />, label: "Dashboard", href: "/" },
-  { icon: <PeopleIcon />, label: "Data Customer", href: "/customers" },
+  { key: "dashboard", icon: <DashboardIcon />, label: "Dashboard", href: "/" },
+  { key: "customers", icon: <PeopleIcon />, label: "Data Customer", href: "/customers" },
   { 
+    key: "products",
     icon: <InventoryIcon />, 
     label: "Data Produk", 
     href: "/products",
@@ -68,6 +71,7 @@ const menuItems: MenuItem[] = [
     ]
   },
   { 
+    key: "finance",
     icon: <FinanceIcon />, 
     label: "Keuangan", 
     href: "/finance",
@@ -78,21 +82,34 @@ const menuItems: MenuItem[] = [
       { label: "Hutang & Piutang", href: "/finance/debts" },
       { label: "Daftar Akun (COA)", href: "/finance/coa" },
       { label: "Kategori", href: "/finance/categories" },
+      { label: "Laporan Keuangan", href: "/reports/finance" },
     ]
   },
   { 
+    key: "sales",
+    icon: <SalesIcon />, 
+    label: "Penjualan", 
+    href: "/inventory/pos",
+    subItems: [
+      { label: "POS Kasir", href: "/inventory/pos" },
+      { label: "List Penjualan", href: "/inventory?view=invoices" },
+    ]
+  },
+  { 
+    key: "inventory",
     icon: <InventoryIcon />, 
     label: "Inventory", 
     href: "/inventory",
     subItems: [
-      { label: "Stok Barang", href: "/inventory" },
+      { label: "Stok Barang", href: "/inventory?view=stock" },
+      { label: "Aset di Pelanggan", href: "/inventory?view=assets" },
       { label: "Customer Logistik", href: "/inventory/customers" },
       { label: "Master Logistik", href: "/inventory/master" },
-      { label: "Laporan Penjualan", href: "/reports/inventory-sales" },
       { label: "Pergerakan Stok", href: "/reports/inventory-movements" },
     ]
   },
   { 
+    key: "employees",
     icon: <BadgeIcon />, 
     label: "Data Pegawai", 
     href: "/employees",
@@ -102,6 +119,7 @@ const menuItems: MenuItem[] = [
     ]
   },
   { 
+    key: "reports",
     icon: <AnalyticsIcon />, 
     label: "Laporan", 
     href: "#",
@@ -109,16 +127,13 @@ const menuItems: MenuItem[] = [
       { label: "KPI Pegawai", href: "/performance" },
       { label: "Laporan Absensi", href: "/reports/attendance" },
       { label: "Laporan Keuangan", href: "/reports/finance" },
-      { label: "Analisis Churn (Revenue)", href: "/reports/churn" },
-      { label: "Efisiensi Lapangan (OpEx)", href: "/reports/efficiency" },
-      { label: "Laporan Penjualan Barang", href: "/reports/inventory-sales" },
-      { label: "Laporan Pergerakan Stok", href: "/reports/inventory-movements" },
+      { label: "Valuasi Perusahaan", href: "/reports/valuation" },
     ]
   },
-  { icon: <MaintenanceIcon />, label: "Maintenance", href: "/maintenance" },
-  { icon: <TicketIcon />, label: "Layanan Pelanggan", href: "/support" },
-  // { icon: <ScheduleIcon />, label: "Penugasan", href: "/tasks" },
+  { key: "maintenance", icon: <MaintenanceIcon />, label: "Maintenance", href: "/maintenance" },
+  { key: "support", icon: <TicketIcon />, label: "Layanan Pelanggan", href: "/support" },
   { 
+    key: "presence",
     icon: <PresenceIcon />, 
     label: "Presensi", 
     href: "/presence",
@@ -130,7 +145,7 @@ const menuItems: MenuItem[] = [
       { label: "Data Presensi", href: "/presence/history" },
     ]
   },
-  { icon: <BadgeIcon />, label: "Kirim Notifikasi", href: "/notifications" },
+  { key: "notifications", icon: <BadgeIcon />, label: "Kirim Notifikasi", href: "/notifications" },
 ];
 
 function SidebarContent() {
@@ -165,6 +180,49 @@ function SidebarContent() {
   }, []);
 
   const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>({});
+  // Fallback: Default to showing all keys if fetch fails to keep app usable
+  const [allowedKeys, setAllowedKeys] = React.useState<string[]>(menuItems.map(i => i.key).concat(['settings']));
+  const [userRole, setUserRole] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    // Import server actions dynamically to ensure they run only on client mount
+    const fetchAccess = async () => {
+      try {
+        const { getUserSessionAction, getMenuPermissionsAction } = await import('@/actions/permissions');
+        
+        // 1. Get current session info via Server Action
+        const meData = await getUserSessionAction();
+        if (!meData.success || !meData.user) return;
+        
+        const role = meData.user.role;
+        setUserRole(role);
+
+        // 2. Fetch permissions for this role via Server Action
+        const permData = await getMenuPermissionsAction(role);
+        
+        if (permData.success && permData.permissions) {
+          if (role === 'admin') {
+            setAllowedKeys(menuItems.map(i => i.key).concat(['settings']));
+          } else {
+            const enabled = permData.permissions
+              .filter((p: any) => p.platform === 'web' && p.is_enabled === 1)
+              .map((p: any) => p.menu_key);
+            
+            const hasAnyRecords = permData.permissions.some((p: any) => p.platform === 'web');
+            const allWebKeys = menuItems.map(i => i.key).concat(['settings']);
+            
+            setAllowedKeys(hasAnyRecords ? enabled : allWebKeys);
+          }
+        }
+      } catch (err) {
+        console.error('[Sidebar] Action failed:', err);
+      }
+    };
+
+    if (mounted) {
+      fetchAccess();
+    }
+  }, [mounted]);
 
   // Auto-expand parent menu on mount or pathname change
   React.useEffect(() => {
@@ -229,7 +287,7 @@ function SidebarContent() {
 
 
       <List sx={{ flexGrow: 1, px: 2 }} suppressHydrationWarning>
-        {menuItems.map((item) => {
+        {menuItems.filter(item => allowedKeys.includes(item.key)).map((item) => {
           const hasSubItems = !!item.subItems;
           const isOpen = mounted ? openMenus[item.label] : (item.label === "Data Produk");
           const isSelected = mounted ? (pathname === item.href || (item.subItems?.some(sub => fullPath === sub.href))) : (pathname === item.href);
@@ -326,27 +384,29 @@ function SidebarContent() {
       <Box sx={{ p: 2, mt: 'auto' }}>
         <Divider sx={{ mb: 2 }} />
         <List disablePadding>
-          <ListItem disablePadding sx={{ mb: 0.5 }}>
-            <ListItemButton 
-              component={Link}
-              href="/settings"
-              selected={pathname === '/settings'}
-              sx={{ 
-                borderRadius: 3, 
-                py: 1.5,
-                '&.Mui-selected': {
-                  bgcolor: alpha(theme.palette.primary.main, 0.1),
-                  color: 'primary.main',
-                  '& .MuiListItemIcon-root': { color: 'primary.main' },
-                }
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40, color: pathname === '/settings' ? 'primary.main' : 'text.secondary' }}>
-                <SettingsIcon />
-              </ListItemIcon>
-              <ListItemText primary="Settings" primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: 500 }} />
-            </ListItemButton>
-          </ListItem>
+          {allowedKeys.includes('settings') && (
+            <ListItem disablePadding sx={{ mb: 0.5 }}>
+              <ListItemButton 
+                component={Link}
+                href="/settings"
+                selected={pathname === '/settings'}
+                sx={{ 
+                  borderRadius: 3, 
+                  py: 1.5,
+                  '&.Mui-selected': {
+                    bgcolor: alpha(theme.palette.primary.main, 0.1),
+                    color: 'primary.main',
+                    '& .MuiListItemIcon-root': { color: 'primary.main' },
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: pathname === '/settings' ? 'primary.main' : 'text.secondary' }}>
+                  <SettingsIcon />
+                </ListItemIcon>
+                <ListItemText primary="Settings" primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: 500 }} />
+              </ListItemButton>
+            </ListItem>
+          )}
           <ListItem disablePadding>
             <ListItemButton 
               onClick={handleLogout}

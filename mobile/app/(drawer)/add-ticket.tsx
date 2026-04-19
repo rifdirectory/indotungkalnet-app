@@ -21,7 +21,8 @@ import {
   Info,
   ChevronDown,
   Check,
-  AlertCircle
+  AlertCircle,
+  X
 } from 'lucide-react-native';
 import axios from 'axios';
 import { API_URL } from '../../services/api';
@@ -34,10 +35,18 @@ export default function AddTicketScreen() {
 
   // Form States
   const [customer, setCustomer] = useState<any>(null);
-  const [category, setCategory] = useState('Gangguan');
+  const [targetLocation, setTargetLocation] = useState(''); // Only for Pemasangan Baru
+  const [category, setCategory] = useState('Perbaikan');
   const [priority, setPriority] = useState('Medium');
+  const [difficulty, setDifficulty] = useState('Low');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [description, setDescription] = useState('');
   const [assignedTo, setAssignedTo] = useState<number[]>([]);
+  
+  // Costs
+  const [fuelCost, setFuelCost] = useState('0');
+  const [materialCost, setMaterialCost] = useState('0');
+  const [otherCost, setOtherCost] = useState('0');
   
   // Data States
   const [customers, setCustomers] = useState<any[]>([]);
@@ -45,17 +54,27 @@ export default function AddTicketScreen() {
   const [searchCustomer, setSearchCustomer] = useState('');
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [showEmployeePicker, setShowEmployeePicker] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [custRes, empRes] = await Promise.all([
           axios.get(`${API_URL}/customers`),
-          axios.get(`${API_URL}/employees?status=active`)
+          axios.get(`${API_URL}/employees?range=today`)
         ]);
         
         if (custRes.data.success) setCustomers(custRes.data.data);
-        if (empRes.data.success) setEmployees(empRes.data.data.filter((e: any) => e.position_id !== null)); // Only real employees
+        if (empRes.data.success) {
+          const techList = empRes.data.data.filter((e: any) => 
+            (e.position_name?.toLowerCase().includes('teknisi') || 
+             e.position_name?.toLowerCase().includes('noc')) && 
+            e.full_name !== 'Wisnu Rachmawan' &&
+            e.current_status !== 'Off' &&
+            e.current_status !== 'Izin'
+          );
+          setEmployees(techList);
+        }
       } catch (e) {
         console.error('Fetch Error:', e);
       } finally {
@@ -66,8 +85,14 @@ export default function AddTicketScreen() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!customer && !category.includes('baru')) {
+    const isNewInstall = category === 'Pemasangan Baru';
+    
+    if (!isNewInstall && !customer) {
       Alert.alert('Eror', 'Harap pilih pelanggan terlebih dahulu.');
+      return;
+    }
+    if (isNewInstall && !targetLocation) {
+      Alert.alert('Eror', 'Harap isi Nama / Target Lokasi pemasangan.');
       return;
     }
     if (!description) {
@@ -78,11 +103,16 @@ export default function AddTicketScreen() {
     setLoading(true);
     try {
       const payload = {
-        customer_id: customer?.id || customer?.name, // Handles custom name for Maintenance
+        customer_id: isNewInstall ? targetLocation : customer.id,
         category,
         priority,
+        difficulty,
+        phone_number: phoneNumber || (customer?.phone_number ?? ''),
         description,
         assigned_to: assignedTo,
+        fuel_cost: Number(fuelCost),
+        material_cost: Number(materialCost),
+        other_cost: Number(otherCost),
         status: 'Open'
       };
 
@@ -146,90 +176,153 @@ export default function AddTicketScreen() {
       >
         <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
           
-          {/* Customer Selection */}
+          {/* Category Selector */}
           <View className="mb-6">
-            <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">Pelanggan</Text>
-            <TouchableOpacity 
-              onPress={() => setShowCustomerPicker(!showCustomerPicker)}
-              className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex-row items-center justify-between"
-            >
-              <View className="flex-row items-center flex-1">
-                <Search size={18} color="#64748b" />
-                <Text className={`ml-3 font-bold ${customer ? 'text-slate-800' : 'text-slate-400'}`}>
-                  {customer ? customer.full_name : 'Cari Nama Pelanggan...'}
-                </Text>
-              </View>
-              <ChevronDown size={20} color="#94a3b8" />
-            </TouchableOpacity>
+            <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">Kategori Layanan</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+              {["Pemasangan Baru", "Perbaikan", "Perubahan Paket", "Pelanggan Berhenti"].map(cat => (
+                <TouchableOpacity 
+                  key={cat}
+                  onPress={() => setCategory(cat)}
+                  className={`mr-2 px-4 py-2.5 rounded-xl border ${category === cat ? 'bg-blue-600 border-blue-600' : 'bg-slate-50 border-slate-100'}`}
+                >
+                  <Text className={`text-[11px] font-bold ${category === cat ? 'text-white' : 'text-slate-500'}`}>{cat}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
 
-            {showCustomerPicker && (
-              <View className="mt-2 bg-white border border-slate-100 rounded-2xl shadow-xl max-h-60 overflow-hidden">
-                <View className="p-3 border-b border-slate-50">
-                  <TextInput 
-                    className="bg-slate-100 px-4 py-2 rounded-xl text-slate-700 font-bold"
-                    placeholder="Ketik nama atau ID..."
-                    value={searchCustomer}
-                    onChangeText={setSearchCustomer}
-                  />
-                </View>
-                <ScrollView nestedScrollEnabled className="flex-1">
-                  {filteredCustomers.map((c) => (
-                    <TouchableOpacity 
-                      key={c.id}
-                      onPress={() => {
-                        setCustomer(c);
-                        setShowCustomerPicker(false);
-                      }}
-                      className="p-4 border-b border-slate-50 flex-row items-center justify-between"
-                    >
-                      <View>
-                        <Text className="font-bold text-slate-800">{c.full_name}</Text>
-                        <Text className="text-[10px] text-slate-400 font-medium">#{c.id} - {c.pppoe_username || 'No PPPoE'}</Text>
-                      </View>
-                      {customer?.id === c.id && <Check size={18} color="#0a84ff" />}
-                    </TouchableOpacity>
-                  ))}
-                  {/* Option for custom maintenance name */}
-                  <TouchableOpacity 
-                    onPress={() => {
-                      setCustomer({ id: null, full_name: searchCustomer, name: searchCustomer });
-                      setShowCustomerPicker(false);
-                    }}
-                    className="p-4 bg-blue-50/50"
-                  >
-                    <Text className="text-blue-600 font-bold text-xs italic">Cari: "{searchCustomer}" (Pilih sebagai nama manual)</Text>
-                  </TouchableOpacity>
-                </ScrollView>
+          {/* Customer Selection or Target Location */}
+          <View className="mb-6">
+            <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">
+              {category === 'Pemasangan Baru' ? 'Nama / Target Lokasi' : 'Pelanggan'}
+            </Text>
+            
+            {category === 'Pemasangan Baru' ? (
+              <View className={`border rounded-2xl p-4 flex-row items-center transition-all ${focusedField === 'targetLoc' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+                <Search size={18} color={focusedField === 'targetLoc' ? "#3b82f6" : "#64748b"} />
+                <TextInput 
+                  className="ml-3 flex-1 font-bold text-slate-800 border-0 outline-none p-0 bg-transparent"
+                  placeholder={focusedField === 'targetLoc' ? "" : "Contoh: Perum. Indah Blok A / Tiang 4"}
+                  placeholderTextColor="#94a3b8"
+                  onFocus={() => setFocusedField('targetLoc')}
+                  onBlur={() => setFocusedField(null)}
+                  autoCorrect={false}
+                  autoComplete="off"
+                  textContentType="none"
+                  importantForAutofill="no"
+                  spellCheck={false}
+                  value={targetLocation}
+                  onChangeText={setTargetLocation}
+                />
               </View>
+            ) : (
+              <>
+                <TouchableOpacity 
+                  onPress={() => setShowCustomerPicker(!showCustomerPicker)}
+                  className={`border rounded-2xl p-4 flex-row items-center justify-between ${showCustomerPicker ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}
+                >
+                  <View className="flex-row items-center flex-1">
+                    <Search size={18} color={showCustomerPicker ? "#3b82f6" : "#64748b"} />
+                    <Text className={`ml-3 font-bold ${customer ? 'text-slate-800' : 'text-slate-400'}`}>
+                      {customer ? customer.full_name : 'Cari Nama Pelanggan...'}
+                    </Text>
+                  </View>
+                  <ChevronDown size={20} color={showCustomerPicker ? "#3b82f6" : "#94a3b8"} />
+                </TouchableOpacity>
+
+                {showCustomerPicker && (
+                  <View className="mt-2 bg-white border border-slate-100 rounded-2xl shadow-xl max-h-60 overflow-hidden">
+                    <View className="p-3 border-b border-slate-50">
+                      <TextInput 
+                        className="bg-slate-100 px-4 py-2 rounded-xl text-slate-700 font-bold border-0 outline-none"
+                        placeholder={focusedField === 'searchCust' ? "" : "Ketik nama atau ID..."}
+                        placeholderTextColor="#94a3b8"
+                        onFocus={() => setFocusedField('searchCust')}
+                        onBlur={() => setFocusedField(null)}
+                        autoCorrect={false}
+                        autoComplete="off"
+                        textContentType="none"
+                        importantForAutofill="no"
+                        spellCheck={false}
+                        value={searchCustomer}
+                        onChangeText={setSearchCustomer}
+                      />
+                    </View>
+                    <ScrollView nestedScrollEnabled className="flex-1">
+                      {filteredCustomers.map((c) => (
+                        <TouchableOpacity 
+                          key={c.id}
+                          onPress={() => {
+                            setCustomer(c);
+                            setPhoneNumber(c.phone_number || '');
+                            setShowCustomerPicker(false);
+                          }}
+                          className="p-4 border-b border-slate-50 flex-row items-center justify-between"
+                        >
+                          <View>
+                            <Text className="font-bold text-slate-800">{c.full_name}</Text>
+                            <Text className="text-[10px] text-slate-400 font-medium">#{c.id} - {c.pppoe_username || 'No PPPoE'}</Text>
+                          </View>
+                          {customer?.id === c.id && <Check size={18} color="#0a84ff" />}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </>
             )}
           </View>
 
-          {/* Category & Priority */}
-          <View className="flex-row mb-6 space-x-4">
-            <View className="flex-1">
-              <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">Kategori</Text>
-              <View className="bg-slate-100 rounded-2xl p-1 flex-row">
-                {['Gangguan', 'Bantuan'].map(cat => (
-                  <TouchableOpacity 
-                    key={cat}
-                    onPress={() => setCategory(cat)}
-                    className={`flex-1 py-3 items-center rounded-xl ${category === cat ? 'bg-white shadow-sm' : ''}`}
-                  >
-                    <Text className={`text-[11px] font-black ${category === cat ? 'text-blue-600' : 'text-slate-400'}`}>{cat}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+          {/* Phone Number */}
+          <View className="mb-6">
+            <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">Nomor HP / WhatsApp (Opsional)</Text>
+            <View className={`border rounded-2xl p-4 flex-row items-center transition-all ${focusedField === 'phone' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+              <Info size={18} color={focusedField === 'phone' ? "#3b82f6" : "#64748b"} />
+              <TextInput 
+                className="ml-3 flex-1 font-bold text-slate-800 border-0 outline-none p-0 bg-transparent"
+                placeholder={focusedField === 'phone' ? "" : "0812xxxx"}
+                placeholderTextColor="#94a3b8"
+                onFocus={() => setFocusedField('phone')}
+                onBlur={() => setFocusedField(null)}
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
+                importantForAutofill="no"
+                spellCheck={false}
+                keyboardType="phone-pad"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+              />
             </View>
+          </View>
+
+          {/* Priority & Difficulty */}
+          <View className="flex-row mb-6 space-x-4">
             <View className="flex-1">
               <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">Prioritas</Text>
               <View className="bg-slate-100 rounded-2xl p-1 flex-row">
-                {['Normal', 'Urgent'].map(p => (
+                {['High', 'Medium', 'Low'].map(p => (
                   <TouchableOpacity 
                     key={p}
                     onPress={() => setPriority(p)}
                     className={`flex-1 py-3 items-center rounded-xl ${priority === p ? 'bg-white shadow-sm' : ''}`}
                   >
-                    <Text className={`text-[11px] font-black ${priority === p ? (p === 'Urgent' ? 'text-red-500' : 'text-blue-600') : 'text-slate-400'}`}>{p}</Text>
+                    <Text className={`text-[10px] font-black ${priority === p ? (p === 'High' ? 'text-red-500' : 'text-blue-600') : 'text-slate-400'}`}>{p}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <View className="flex-1">
+              <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">Kesulitan</Text>
+              <View className="bg-slate-100 rounded-2xl p-1 flex-row">
+                {['High', 'Medium', 'Low'].map(d => (
+                  <TouchableOpacity 
+                    key={d}
+                    onPress={() => setDifficulty(d)}
+                    className={`flex-1 py-3 items-center rounded-xl ${difficulty === d ? 'bg-white shadow-sm' : ''}`}
+                  >
+                    <Text className={`text-[10px] font-black ${difficulty === d ? 'text-orange-600' : 'text-slate-400'}`}>{d}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -238,16 +331,85 @@ export default function AddTicketScreen() {
 
           {/* Description */}
           <View className="mb-6">
-            <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">Keluhan / Masalah</Text>
-            <View className="bg-slate-50 border border-slate-100 rounded-2xl p-4 min-h-[120px]">
+            <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">Detail Keluhan / Masalah</Text>
+            <View className={`border rounded-2xl p-4 min-h-[120px] transition-all ${focusedField === 'desc' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
               <TextInput 
                 multiline
-                className="text-slate-800 font-bold leading-5"
-                placeholder="Tuliskan detail keluhan di sini..."
+                className="text-slate-800 font-bold leading-5 border-0 outline-none p-0 bg-transparent"
+                placeholder={focusedField === 'desc' ? "" : "Tuliskan detail keluhan di sini..."}
+                placeholderTextColor="#94a3b8"
+                onFocus={() => setFocusedField('desc')}
+                onBlur={() => setFocusedField(null)}
+                autoCorrect={false}
+                autoComplete="off"
+                textContentType="none"
+                importantForAutofill="no"
+                spellCheck={false}
                 value={description}
                 onChangeText={setDescription}
                 textAlignVertical="top"
               />
+            </View>
+          </View>
+
+          {/* Operational Costs */}
+          <View className="mb-6">
+            <Text className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-2 ml-1">Estimasi Biaya Operasional (Rp)</Text>
+            <View className="flex-row space-x-2">
+              <View className={`flex-1 border rounded-2xl p-3 transition-all ${focusedField === 'fuel' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+                <Text className={`text-[9px] font-bold mb-1 uppercase ${focusedField === 'fuel' ? 'text-blue-500' : 'text-slate-400'}`}>Bensin</Text>
+                <TextInput 
+                  keyboardType="numeric"
+                  className="text-slate-800 font-bold text-sm border-0 outline-none p-0 bg-transparent"
+                  placeholder={focusedField === 'fuel' ? "" : "0"}
+                  placeholderTextColor="#94a3b8"
+                  onFocus={() => setFocusedField('fuel')}
+                  onBlur={() => setFocusedField(null)}
+                  autoCorrect={false}
+                  autoComplete="off"
+                  textContentType="none"
+                  importantForAutofill="no"
+                  spellCheck={false}
+                  value={fuelCost}
+                  onChangeText={setFuelCost}
+                />
+              </View>
+              <View className={`flex-1 border rounded-2xl p-3 transition-all ${focusedField === 'mat' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+                <Text className={`text-[9px] font-bold mb-1 uppercase ${focusedField === 'mat' ? 'text-blue-500' : 'text-slate-400'}`}>Material</Text>
+                <TextInput 
+                  keyboardType="numeric"
+                  className="text-slate-800 font-bold text-sm border-0 outline-none p-0 bg-transparent"
+                  placeholder={focusedField === 'mat' ? "" : "0"}
+                  placeholderTextColor="#94a3b8"
+                  onFocus={() => setFocusedField('mat')}
+                  onBlur={() => setFocusedField(null)}
+                  autoCorrect={false}
+                  autoComplete="off"
+                  textContentType="none"
+                  importantForAutofill="no"
+                  spellCheck={false}
+                  value={materialCost}
+                  onChangeText={setMaterialCost}
+                />
+              </View>
+              <View className={`flex-1 border rounded-2xl p-3 transition-all ${focusedField === 'oth' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-50 border-slate-100'}`}>
+                <Text className={`text-[9px] font-bold mb-1 uppercase ${focusedField === 'oth' ? 'text-blue-500' : 'text-slate-400'}`}>Lainnya</Text>
+                <TextInput 
+                  keyboardType="numeric"
+                  className="text-slate-800 font-bold text-sm border-0 outline-none p-0 bg-transparent"
+                  placeholder={focusedField === 'oth' ? "" : "0"}
+                  placeholderTextColor="#94a3b8"
+                  onFocus={() => setFocusedField('oth')}
+                  onBlur={() => setFocusedField(null)}
+                  autoCorrect={false}
+                  autoComplete="off"
+                  textContentType="none"
+                  importantForAutofill="no"
+                  spellCheck={false}
+                  value={otherCost}
+                  onChangeText={setOtherCost}
+                />
+              </View>
             </View>
           </View>
 
@@ -279,6 +441,7 @@ export default function AddTicketScreen() {
                         } else {
                           setAssignedTo([...assignedTo, e.id]);
                         }
+                        setShowEmployeePicker(false);
                       }}
                       className="p-4 border-b border-slate-50 flex-row items-center justify-between"
                     >
@@ -297,8 +460,14 @@ export default function AddTicketScreen() {
                     const emp = employees.find(e => e.id === id);
                     if (!emp) return null;
                     return (
-                        <View key={id} className="bg-blue-50 px-3 py-1.5 rounded-full mr-2 mb-2 border border-blue-100">
-                             <Text className="text-blue-600 text-[10px] font-bold uppercase">{emp.full_name}</Text>
+                        <View key={id} className="bg-blue-50 px-3 py-1.5 rounded-xl mr-2 mb-2 border border-blue-100 flex-row items-center">
+                             <Text className="text-blue-600 text-[10px] font-black uppercase">{emp.full_name}</Text>
+                             <TouchableOpacity 
+                              onPress={() => setAssignedTo(assignedTo.filter(aid => aid !== id))}
+                              className="ml-2 bg-blue-100/50 p-0.5 rounded-md"
+                             >
+                                <X size={10} color="#2563eb" strokeWidth={3} />
+                             </TouchableOpacity>
                         </View>
                     );
                 })}

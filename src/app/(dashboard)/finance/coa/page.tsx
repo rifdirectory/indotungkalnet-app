@@ -140,7 +140,7 @@ export default function ChartOfAccountsPage() {
 
   return (
     <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
-      <Portal>
+      <Portal container={typeof document !== 'undefined' ? document.getElementById('header-actions-portal') : null}>
         <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenAdd}
           sx={{ borderRadius: 2, fontWeight: 700, py: 0.5 }} size="small">
           Tambah Akun

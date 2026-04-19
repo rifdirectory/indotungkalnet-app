@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
-import * as SecureStore from '../utils/storage';
 import { Clock, Calendar } from 'lucide-react-native';
 import axios from 'axios';
 import { usePathname } from 'expo-router';
-
+import { useUser } from '../context/UserContext';
 import { API_URL } from '../services/api';
 
 export default function GlobalShiftFooter() {
     const pathname = usePathname();
+    const { user } = useUser();
     const [shift, setShift] = useState<string>('Memuat...');
     const [hours, setHours] = useState<string>('00:00 - 00:00');
     const [isOnLeave, setIsOnLeave] = useState(false);
@@ -22,14 +22,13 @@ export default function GlobalShiftFooter() {
         isFetching.current = true;
         
         try {
-            const id = await SecureStore.getItemAsync('user_id');
-            if (!id) {
+            if (!user?.id) {
                 setIsVisible(false); // Hide on login screen
                 return;
             }
             setIsVisible(true);
 
-            const res = await axios.get(`${API_URL}/presence/current-status?employee_id=${id}`);
+            const res = await axios.get(`${API_URL}/presence/current-status?employee_id=${user.id}`);
             if (res.data.success) {
                 const d = res.data.data;
                 setShift(d.shift_name || 'Normal');
