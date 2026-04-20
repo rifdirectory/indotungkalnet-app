@@ -1,0 +1,13 @@
+UPDATE debts SET entity_id = 9 WHERE title LIKE '%Mirwansyah%';
+UPDATE debts SET entity_id = 4 WHERE title LIKE '%Ria%';
+UPDATE debts SET entity_id = 6 WHERE title LIKE '%Rehal%';
+UPDATE debts SET entity_id = 2 WHERE title LIKE '%Wisnu%';
+UPDATE debts SET entity_id = 7 WHERE title LIKE '%Diman%' OR title LIKE '%Sudirman%';
+UPDATE debts SET entity_id = 5 WHERE title LIKE '%Amir%';
+UPDATE debts SET entity_id = 8 WHERE title LIKE '%Salam%';
+UPDATE debts SET entity_id = 10 WHERE title LIKE '%Awi%' OR title LIKE '%Syarkawi%';
+UPDATE debts SET entity_id = 1 WHERE title LIKE '%Arif%';
+UPDATE debts SET entity_id = 14 WHERE title LIKE '%Rita%';
+UPDATE debts SET entity_id = 13 WHERE title LIKE '%Eriyadi%';
+UPDATE debts SET entity_id = 3 WHERE title LIKE '%Ooy%' OR title LIKE '%Sopian%';
+UPDATE debts SET entity_id = 15 WHERE title LIKE '%Efendi%' OR title LIKE '%Eyik%';

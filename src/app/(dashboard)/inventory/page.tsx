@@ -47,6 +47,7 @@ import LogisticsInvoicing from '@/components/inventory/LogisticsInvoicing';
 import SalesPOS from '@/components/inventory/SalesPOS';
 import ReceivableDashboard from '@/components/inventory/ReceivableDashboard';
 import { useSearchParams } from 'next/navigation';
+import { safeFetch } from '@/lib/fetchUtils';
 
 export default function InventoryPage() {
   const theme = useTheme();
@@ -90,9 +91,8 @@ export default function InventoryPage() {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/inventory');
-      const data = await res.json();
-      if (data.success) setItems(data.data);
+      const { success, data } = await safeFetch('/api/inventory');
+      if (success && data?.success) setItems(data.data);
     } catch (err) {
       setSnackbar({ open: true, message: 'Gagal memuat data inventaris', type: 'error' });
     } finally {
@@ -101,38 +101,25 @@ export default function InventoryPage() {
   };
 
   const fetchCustomers = async () => {
-    try {
-        const res = await fetch('/api/customers');
-        const data = await res.json();
-        if (data.success) {
-            // Filter only logistics customers for inventory transactions
-            setCustomers(data.data.filter((c: any) => c.customer_type === 'logistics'));
-        }
-    } catch (err) {}
+    const { success, data } = await safeFetch('/api/customers');
+    if (success && data?.success) {
+        setCustomers(data.data.filter((c: any) => c.customer_type === 'logistics'));
+    }
   };
 
   const fetchCategories = async () => {
-    try {
-        const res = await fetch('/api/inventory/categories');
-        const data = await res.json();
-        if (data.success) setCategories(data.data);
-    } catch (err) {}
+    const { success, data } = await safeFetch('/api/inventory/categories');
+    if (success && data?.success) setCategories(data.data);
   };
 
   const fetchLocations = async () => {
-    try {
-        const res = await fetch('/api/inventory/locations');
-        const data = await res.json();
-        if (data.success) setLocations(data.data);
-    } catch (err) {}
+    const { success, data } = await safeFetch('/api/inventory/locations');
+    if (success && data?.success) setLocations(data.data);
   };
 
   const fetchTickets = async () => {
-    try {
-        const res = await fetch('/api/support');
-        const data = await res.json();
-        if (data.success) setTickets(data.data.filter((t: any) => t.status !== 'Closed'));
-    } catch (err) {}
+    const { success, data } = await safeFetch('/api/support');
+    if (success && data?.success) setTickets(data.data.filter((t: any) => t.status !== 'Closed'));
   };
 
 
@@ -153,13 +140,13 @@ export default function InventoryPage() {
   const handleSaveItem = async () => {
     try {
         const method = editMode ? 'PUT' : 'POST';
-        const res = await fetch('/api/inventory', {
+        const { success, data, message: errMessage } = await safeFetch('/api/inventory', {
             method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(editMode ? { ...newItem, id: selectedItem.id, user: 'Admin' } : { ...newItem, user: 'Admin' })
         });
-        const data = await res.json();
-        if (data.success) {
+        
+        if (success && data?.success) {
             setSnackbar({ open: true, message: editMode ? 'Barang berhasil diupdate' : 'Barang berhasil ditambahkan', type: 'success' });
             setOpenAdd(false);
             setEditMode(false);
@@ -167,7 +154,7 @@ export default function InventoryPage() {
             setNewItem({ name: '', item_code: '', category: '', stock: 0, unit: 'Unit', min_stock: 5, price: 0, purchase_price: 0, location: 'Gudang Utama', postel_number: '', conversion_factor: 1, secondary_unit: '', track_sn: false });
             fetchItems();
         } else {
-            throw new Error(data.message);
+            throw new Error(errMessage || data?.message || 'Gagal menyimpan barang');
         }
     } catch (err: any) {
         setSnackbar({ open: true, message: err.message, type: 'error' });
@@ -178,15 +165,14 @@ export default function InventoryPage() {
     if (!confirm(`Arsip barang "${item.name}"? \n\nRiwayat transaksi lama akan tetap tersimpan di laporan, namun barang ini tidak akan muncul lagi di daftar katalog aktif.`)) return;
     
     try {
-        const res = await fetch(`/api/inventory?id=${item.id}&user=Admin`, {
+        const { success, data, message: errMessage } = await safeFetch(`/api/inventory?id=${item.id}&user=Admin`, {
             method: 'DELETE'
         });
-        const data = await res.json();
-        if (data.success) {
+        if (success && data?.success) {
             setSnackbar({ open: true, message: 'Barang berhasil diarsipkan', type: 'success' });
             fetchItems();
         } else {
-            throw new Error(data.message);
+            throw new Error(errMessage || data?.message || 'Gagal mengarsipkan barang');
         }
     } catch (err: any) {
         setSnackbar({ open: true, message: err.message, type: 'error' });
@@ -195,7 +181,7 @@ export default function InventoryPage() {
 
   const handleAdjustStock = async () => {
     try {
-        const res = await fetch('/api/inventory/transaction', {
+        const { success, data, message: errMessage } = await safeFetch('/api/inventory/transaction', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -204,14 +190,14 @@ export default function InventoryPage() {
                 user: 'Admin'
             })
         });
-        const data = await res.json();
-        if (data.success) {
+        
+        if (success && data?.success) {
             setSnackbar({ open: true, message: 'Stok berhasil diperbarui', type: 'success' });
             setOpenAdjust(false);
             setAdjustment({ type: 'IN', quantity: 1, sale_price: 0, purchase_price: 0, notes: '', reference_id: '', trx_unit: '', trx_factor: 1 });
             fetchItems();
         } else {
-            throw new Error(data.message);
+            throw new Error(errMessage || data?.message || 'Gagal menyesuaikan stok');
         }
     } catch (err: any) {
         setSnackbar({ open: true, message: err.message, type: 'error' });
@@ -221,7 +207,7 @@ export default function InventoryPage() {
   const handleIncomingGoods = async () => {
     if (!selectedItem) return;
     try {
-        const res = await fetch('/api/inventory/transaction', {
+        const { success, data, message: errMessage } = await safeFetch('/api/inventory/transaction', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -233,8 +219,8 @@ export default function InventoryPage() {
                 user: 'Admin'
             })
         });
-        const data = await res.json();
-        if (data.success) {
+        
+        if (success && data?.success) {
             setSnackbar({ 
                 open: true, 
                 message: data.message || `Berhasil menerima ${adjustment.quantity} ${selectedItem.unit} ${selectedItem.name}`, 
@@ -245,7 +231,7 @@ export default function InventoryPage() {
             setAdjustment({ type: 'IN', quantity: 1, sale_price: 0, purchase_price: 0, notes: '', reference_id: '', transaction_date: getJakartaToday(), trx_unit: '', trx_factor: 1 });
             fetchItems();
         } else {
-            throw new Error(data.message);
+            throw new Error(errMessage || data?.message || 'Gagal menerima barang');
         }
     } catch (err: any) {
         setSnackbar({ open: true, message: err.message, type: 'error' });
@@ -255,7 +241,7 @@ export default function InventoryPage() {
   const handleOutgoingGoods = async () => {
     if (!selectedItem) return;
     try {
-        const res = await fetch('/api/inventory/transaction', {
+        const { success, data, message: errMessage } = await safeFetch('/api/inventory/transaction', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -266,15 +252,15 @@ export default function InventoryPage() {
                 user: 'Admin'
             })
         });
-        const data = await res.json();
-        if (data.success) {
+        
+        if (success && data?.success) {
             setSnackbar({ open: true, message: 'Pengeluaran barang berhasil dicatat & disinkronkan', type: 'success' });
             setOpenOutgoing(false);
             setSelectedItem(null);
             setAdjustment({ type: 'OUT', quantity: 1, sale_price: 0, purchase_price: 0, notes: '', reference_id: '', scenario: 'SALE_CASH', entity_id: '', ticket_id: '', due_date: '', transaction_date: getJakartaToday(), trx_unit: '', trx_factor: 1, capitalization_useful_life: 60 } as any);
             fetchItems();
         } else {
-            throw new Error(data.message);
+            throw new Error(errMessage || data?.message || 'Gagal mencatat pengeluaran barang');
         }
     } catch (err: any) {
         setSnackbar({ open: true, message: err.message, type: 'error' });

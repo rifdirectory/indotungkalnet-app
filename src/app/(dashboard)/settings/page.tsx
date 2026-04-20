@@ -18,6 +18,7 @@ import {
   Search as SearchIcon
 } from "@mui/icons-material";
 import Link from 'next/link';
+import { safeFetch } from '@/lib/fetchUtils';
 
 export default function SettingsPage() {
   const theme = useTheme();
@@ -38,9 +39,8 @@ export default function SettingsPage() {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
-      if (data.success) {
+      const { success, data } = await safeFetch('/api/settings');
+      if (success && data?.data) {
         setSettings({
           office_latitude: data.data.office_latitude || '',
           office_longitude: data.data.office_longitude || '',
@@ -51,8 +51,6 @@ export default function SettingsPage() {
           wa_gateway_mode: data.data.wa_gateway_mode || 'cloud'
         });
       }
-    } catch (error) {
-      console.error('Failed to fetch settings:', error);
     } finally {
       setLoading(false);
     }
@@ -66,11 +64,10 @@ export default function SettingsPage() {
     let interval: any;
     if (settings.wa_gateway_mode === 'local') {
       const checkStatus = async () => {
-        try {
-          const res = await fetch('http://localhost:8080/status');
-          const data = await res.json();
+        const { success, data } = await safeFetch('http://localhost:8080/status', { silent: true });
+        if (success && data) {
           setWaStatus(data);
-        } catch (err) {
+        } else {
           setWaStatus({ status: 'OFFLINE', qr: '' });
         }
       };
@@ -83,16 +80,16 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/settings', {
+      const { success, message: errMessage } = await safeFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
       });
-      const data = await res.json();
-      if (data.success) {
+      
+      if (success) {
         setMessage({ type: 'success', text: 'Pengaturan berhasil disimpan!', open: true });
       } else {
-        throw new Error(data.message);
+        throw new Error(errMessage || 'Gagal menyimpan');
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: 'Gagal menyimpan: ' + error.message, open: true });
@@ -299,10 +296,10 @@ export default function SettingsPage() {
                         startIcon={<RefreshIcon />}
                         onClick={async () => {
                             if(confirm('Keluarkan sesi WhatsApp saat ini dan scan ulang QR?')) {
-                                try {
-                                    await fetch('http://localhost:8080/reset', { method: 'POST' });
+                                const { success } = await safeFetch('http://localhost:8080/reset', { method: 'POST', silent: true });
+                                if (success) {
                                     setMessage({ type: 'success', text: 'Reset berhasil. Silahkan tunggu QR Code baru.', open: true });
-                                } catch (e) {
+                                } else {
                                     setMessage({ type: 'error', text: 'Gagal reset gateway.', open: true });
                                 }
                             }

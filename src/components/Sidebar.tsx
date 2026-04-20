@@ -132,11 +132,7 @@ const menuItems: MenuItem[] = [
   },
   { key: "maintenance", icon: <MaintenanceIcon />, label: "Maintenance", href: "/maintenance" },
   { key: "support", icon: <TicketIcon />, label: "Layanan Pelanggan", href: "/support" },
-  { 
-    key: "presence",
-    icon: <PresenceIcon />, 
-    label: "Presensi", 
-    href: "/presence",
+  { key: "presence", icon: <PresenceIcon />, label: "Presensi", href: "/presence", 
     subItems: [
       { label: "Aturan Shift", href: "/presence/shifts" },
       { label: "Jadwal Shift", href: "/presence/schedule" },
@@ -146,6 +142,17 @@ const menuItems: MenuItem[] = [
     ]
   },
   { key: "notifications", icon: <BadgeIcon />, label: "Kirim Notifikasi", href: "/notifications" },
+  { 
+    key: "settings", 
+    icon: <SettingsIcon />, 
+    label: "Settings", 
+    href: "/settings",
+    subItems: [
+      { label: "Pengaturan Umum", href: "/settings" },
+      { label: "Hak Akses Menu", href: "/settings/permissions" },
+      { label: "Audit Logs", href: "/settings/audit-logs" },
+    ]
+  },
 ];
 
 function SidebarContent() {
@@ -195,24 +202,40 @@ function SidebarContent() {
         if (!meData.success || !meData.user) return;
         
         const role = meData.user.role;
+        const userId = meData.user.userId;
         setUserRole(role);
 
-        // 2. Fetch permissions for this role via Server Action
-        const permData = await getMenuPermissionsAction(role);
+        // 2. Fetch permissions for this role and specific user
+        const rolePermData = await getMenuPermissionsAction(role);
+        const userPermData = userId ? await getMenuPermissionsAction(undefined, userId) : { success: true, permissions: [] };
         
-        if (permData.success && permData.permissions) {
-          if (role === 'admin') {
-            setAllowedKeys(menuItems.map(i => i.key).concat(['settings']));
-          } else {
-            const enabled = permData.permissions
-              .filter((p: any) => p.platform === 'web' && p.is_enabled === 1)
-              .map((p: any) => p.menu_key);
-            
-            const hasAnyRecords = permData.permissions.some((p: any) => p.platform === 'web');
-            const allWebKeys = menuItems.map(i => i.key).concat(['settings']);
-            
-            setAllowedKeys(hasAnyRecords ? enabled : allWebKeys);
+        if (role === 'admin') {
+          setAllowedKeys(menuItems.map(i => i.key));
+        } else {
+          // Merge logic: Default all to enabled, then apply Role overrides, then User overrides
+          const perms: Record<string, number> = {};
+          
+          // 1. Initialize all as enabled (1)
+          menuItems.forEach(item => {
+            perms[item.key] = 1;
+          });
+          
+          // 2. Role perms override
+          if (rolePermData.success && rolePermData.permissions && rolePermData.permissions.length > 0) {
+            rolePermData.permissions.forEach((p: any) => {
+              if (p.platform === 'web') perms[p.menu_key] = p.is_enabled;
+            });
           }
+          
+          // 3. User perms override
+          if (userPermData.success && userPermData.permissions && userPermData.permissions.length > 0) {
+            userPermData.permissions.forEach((p: any) => {
+              if (p.platform === 'web') perms[p.menu_key] = p.is_enabled;
+            });
+          }
+
+          const enabled = Object.keys(perms).filter(key => perms[key] === 1);
+          setAllowedKeys(enabled);
         }
       } catch (err) {
         console.error('[Sidebar] Action failed:', err);
@@ -384,29 +407,6 @@ function SidebarContent() {
       <Box sx={{ p: 2, mt: 'auto' }}>
         <Divider sx={{ mb: 2 }} />
         <List disablePadding>
-          {allowedKeys.includes('settings') && (
-            <ListItem disablePadding sx={{ mb: 0.5 }}>
-              <ListItemButton 
-                component={Link}
-                href="/settings"
-                selected={pathname === '/settings'}
-                sx={{ 
-                  borderRadius: 3, 
-                  py: 1.5,
-                  '&.Mui-selected': {
-                    bgcolor: alpha(theme.palette.primary.main, 0.1),
-                    color: 'primary.main',
-                    '& .MuiListItemIcon-root': { color: 'primary.main' },
-                  }
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40, color: pathname === '/settings' ? 'primary.main' : 'text.secondary' }}>
-                  <SettingsIcon />
-                </ListItemIcon>
-                <ListItemText primary="Settings" primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: 500 }} />
-              </ListItemButton>
-            </ListItem>
-          )}
           <ListItem disablePadding>
             <ListItemButton 
               onClick={handleLogout}

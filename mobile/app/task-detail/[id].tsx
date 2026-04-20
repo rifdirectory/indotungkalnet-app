@@ -21,31 +21,51 @@ import {
   AlertCircle,
   MessageCircle,
   User,
+  Users,
   Info,
   Calendar,
   MapPin,
   ClipboardCheck,
   Clock,
-  X
+  Search,
+  X,
+  Edit2,
+  DollarSign,
+  Flag,
+  ShieldAlert,
+  Wrench,
+  WrenchIcon
 } from 'lucide-react-native';
 import axios from 'axios';
 import { API_URL } from '../../services/api';
+import { useUser } from '../../context/UserContext';
 
 export default function TaskDetailScreen() {
   const router = useRouter();
-  const { id, type } = useLocalSearchParams();
+  const { id, type, source } = useLocalSearchParams();
   
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
   const [repairNote, setRepairNote] = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const [techs, setTechs] = useState<any[]>([]);
+  const [selectedAssignees, setSelectedAssignees] = useState<number[]>([]);
+  const [searchTech, setSearchTech] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  
+  const { user } = useUser();
 
   const fetchTaskDetail = async () => {
     try {
       const res = await axios.get(`${API_URL}/tasks?id=${id}&type=${type}`);
       if (res.data.success) {
         setTask(res.data.data);
+        if (res.data.data.assigned_ids) {
+          const ids = res.data.data.assigned_ids.split(',').map((i: string) => parseInt(i)).filter((id: number) => !isNaN(id));
+          setSelectedAssignees(ids);
+        }
       } else {
         Alert.alert('Eror', 'Tugas tidak ditemukan');
         router.back();
@@ -58,8 +78,20 @@ export default function TaskDetailScreen() {
     }
   };
 
+  const fetchTechnicians = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/employees/technicians?use_presence=true`);
+      if (res.data.success) {
+        setTechs(res.data.data);
+      }
+    } catch (err) {
+      console.error('Fetch Technicians Error:', err);
+    }
+  };
+
   useEffect(() => {
     fetchTaskDetail();
+    fetchTechnicians();
   }, [id, type]);
 
   const updateStatus = async (newStatus: string, note?: string) => {
@@ -78,6 +110,37 @@ export default function TaskDetailScreen() {
       }
     } catch (error) {
       Alert.alert('Eror', 'Gagal memperbarui status tugas');
+    }
+  };
+
+  const handleAssignment = async () => {
+    if (!task || type !== 'ticket') return;
+    setAssigning(true);
+    try {
+      const res = await axios.put(`${API_URL}/support/${id}`, {
+        ...task,
+        assigned_to: selectedAssignees
+      });
+      if (res.data.success) {
+        Alert.alert('Sukses', 'Tim teknisi berhasil diperbarui');
+        setShowAssignModal(false);
+        fetchTaskDetail();
+      } else {
+        throw new Error(res.data.message || 'Gagal update assignment');
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.message || error.message || 'Error updating assignment';
+      Alert.alert('Gagal Update', msg);
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace(source === 'tasks' ? '/(drawer)/tasks' : '/(drawer)/tickets');
     }
   };
 
@@ -100,7 +163,9 @@ export default function TaskDetailScreen() {
     selesai: { label: 'DITUTUP', color: '#16a34a', bg: '#f0fdf4', icon: <CheckCircle2 size={16} color="#16a34a" /> },
     closed: { label: 'DITUTUP', color: '#16a34a', bg: '#f0fdf4', icon: <CheckCircle2 size={16} color="#16a34a" /> },
     resolved: { label: 'VERIFIKASI', color: '#a855f7', bg: '#f3e8ff', icon: <Clock size={16} color="#a855f7" /> },
+    'sudah diperbaiki': { label: 'VERIFIKASI', color: '#a855f7', bg: '#f3e8ff', icon: <Clock size={16} color="#a855f7" /> },
     in_progress: { label: 'PROSES', color: '#0a84ff', bg: '#eff6ff', icon: <PlayCircle size={16} color="#0a84ff" /> },
+    'sedang dikerjakan': { label: 'PROSES', color: '#0a84ff', bg: '#eff6ff', icon: <PlayCircle size={16} color="#0a84ff" /> },
     otw: { label: 'OTW', color: '#f97316', bg: '#fff7ed', icon: <MapPin size={16} color="#f97316" /> },
     dibatalkan: { label: 'DIBATALKAN', color: '#ef4444', bg: '#fee2e2', icon: <X size={16} color="#ef4444" /> }
   };
@@ -131,7 +196,7 @@ export default function TaskDetailScreen() {
         style={{ paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 10 }}
         className="px-6 pb-4 bg-white border-b border-slate-100 flex-row items-center z-10"
       >
-        <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
+        <TouchableOpacity onPress={handleBack} className="p-2 -ml-2">
             <ArrowLeft size={24} color="#334155" />
         </TouchableOpacity>
         <Text className="text-slate-800 font-bold tracking-tight text-lg ml-2">Detail Penugasan</Text>
@@ -140,17 +205,20 @@ export default function TaskDetailScreen() {
       <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
         {/* Status Badge */}
         <View className="flex-row items-center mb-6">
+            {/* Status Badge */}
             <View style={{ backgroundColor: statusInfo.bg }} className="px-4 py-1.5 rounded-full flex-row items-center mr-3">
                 {statusInfo.icon}
                 <Text style={{ color: statusInfo.color }} className="text-xs font-bold ml-2 uppercase tracking-widest">
                     {statusInfo.label}
                 </Text>
             </View>
-            <View className={isTicket ? "bg-orange-100 px-3 py-1.5 rounded-xl" : "bg-purple-100 px-3 py-1.5 rounded-xl"}>
-                <Text className={isTicket ? "text-orange-600 font-bold text-[10px]" : "text-purple-600 font-bold text-[10px]"}>
-                    {isTicket ? 'TIKET GANGGUAN' : 'TUGAS MANUAL'}
-                </Text>
-            </View>
+
+            {/* Type Badge (Only for Manual Tasks) */}
+            {!isTicket && (
+              <View className="bg-purple-100 px-3 py-1.5 rounded-xl">
+                  <Text className="text-purple-600 font-bold text-[10px]">TUGAS MANUAL</Text>
+              </View>
+            )}
         </View>
 
         {/* Profile Card - Simplified */}
@@ -169,14 +237,54 @@ export default function TaskDetailScreen() {
           )}
         </View>
 
+        {/* TICKET DETAILS (CATEGORY, PRIORITY, DIFFICULTY) */}
+        {task.type === 'ticket' && (
+          <View className="flex-row flex-wrap mb-6">
+            <View className="bg-blue-50 px-4 py-2 rounded-2xl border border-blue-100 flex-row items-center mr-3 mb-3">
+              <Wrench size={14} color="#2563eb" />
+              <View className="ml-2">
+                <Text className="text-[8px] text-blue-400 font-black uppercase">KATEGORI</Text>
+                <Text className="text-blue-700 font-bold text-[11px]">{task.category || 'Perbaikan'}</Text>
+              </View>
+            </View>
+            
+            <View className={`${task.priority === 'High' ? 'bg-red-50 border-red-100' : 'bg-orange-50 border-orange-100'} px-4 py-2 rounded-2xl border flex-row items-center mr-3 mb-3`}>
+              <ShieldAlert size={14} color={task.priority === 'High' ? "#ef4444" : "#f59e0b"} />
+              <View className="ml-2">
+                <Text className={`text-[8px] ${task.priority === 'High' ? 'text-red-400' : 'text-orange-400'} font-black uppercase`}>PRIORITAS</Text>
+                <Text className={`font-bold text-[11px] ${task.priority === 'High' ? 'text-red-700' : 'text-orange-700'}`}>{task.priority || 'Medium'}</Text>
+              </View>
+            </View>
+
+            <View className="bg-slate-50 px-4 py-2 rounded-2xl border border-slate-100 flex-row items-center mb-3">
+              <Flag size={14} color="#475569" />
+              <View className="ml-2">
+                <Text className="text-[8px] text-slate-400 font-black uppercase">KESULITAN</Text>
+                <Text className="text-slate-700 font-bold text-[11px]">{task.difficulty || 'Low'}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* TIM TEKNISI (PIC) */}
-        {task.pic_names && (
+        {task.type === 'ticket' && (
             <View className="mb-8 bg-slate-50 p-5 rounded-3xl border border-slate-100">
-                <View className="flex-row items-center mb-3">
-                    <User size={18} color="#475569" />
-                    <Text className="ml-3 font-bold text-slate-500 text-[10px] uppercase tracking-widest">TIM TEKNISI (PIC)</Text>
+                <View className="flex-row items-center justify-between mb-3">
+                    <View className="flex-row items-center">
+                        <Users size={18} color="#475569" />
+                        <Text className="ml-3 font-bold text-slate-500 text-[10px] uppercase tracking-widest">TIM TEKNISI (PIC)</Text>
+                    </View>
+                    {(user?.isPic || user?.role === 'admin') && source !== 'tasks' && (
+                        <TouchableOpacity 
+                            onPress={() => setShowAssignModal(true)}
+                            className="bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100 flex-row items-center"
+                        >
+                            <Edit2 size={12} color="#2563eb" />
+                            <Text className="text-blue-600 font-bold text-[10px] ml-1.5 uppercase">Pilih / Ubah</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
-                <Text className="text-slate-700 font-bold leading-5">{task.pic_names}</Text>
+                <Text className="text-slate-700 font-bold leading-5">{task.pic_names || 'Belum Ada Teknisi'}</Text>
             </View>
         )}
 
@@ -220,6 +328,32 @@ export default function TaskDetailScreen() {
             </View>
           )}
 
+          {/* Operational Costs */}
+          {task.type === 'ticket' && source !== 'tasks' && (
+            <View>
+              <View className="flex-row items-center mb-3">
+                <DollarSign size={18} color="#0a84ff" />
+                <Text className="ml-3 font-bold text-slate-400 text-[10px] uppercase tracking-widest">BIAYA OPERASIONAL (ESTIMASI)</Text>
+              </View>
+              <View className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex-row justify-between">
+                <View className="items-center flex-1">
+                  <Text className="text-[9px] text-slate-400 font-bold uppercase mb-1">Bensin</Text>
+                  <Text className="text-slate-800 font-black">Rp {(task.fuel_cost || 0).toLocaleString('id-ID')}</Text>
+                </View>
+                <View className="w-[1px] h-full bg-slate-200 mx-4" />
+                <View className="items-center flex-1">
+                  <Text className="text-[9px] text-slate-400 font-bold uppercase mb-1">Material</Text>
+                  <Text className="text-slate-800 font-black">Rp {(task.material_cost || 0).toLocaleString('id-ID')}</Text>
+                </View>
+                <View className="w-[1px] h-full bg-slate-200 mx-4" />
+                <View className="items-center flex-1">
+                  <Text className="text-[9px] text-slate-400 font-bold uppercase mb-1">Lainnya</Text>
+                  <Text className="text-slate-800 font-black">Rp {(task.other_cost || 0).toLocaleString('id-ID')}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* Tanggal */}
           <View>
             <View className="flex-row items-center mb-3">
@@ -240,7 +374,7 @@ export default function TaskDetailScreen() {
         <View className="absolute bottom-0 left-0 right-0 p-6 bg-white border-t border-slate-100 shadow-2xl">
           <View className="flex-row items-center space-x-3">
               {/* Cancel Button */}
-              {(task.status.toLowerCase() === 'open' || task.status.toLowerCase() === 'pending') && (
+              {(task.status.toLowerCase() === 'open' || task.status.toLowerCase() === 'pending') && source !== 'tasks' && (
                   <TouchableOpacity 
                       onPress={() => {
                         Alert.alert(
@@ -352,6 +486,93 @@ export default function TaskDetailScreen() {
                 className="flex-1 bg-emerald-600 py-5 rounded-[20px] items-center shadow-lg shadow-emerald-100"
               >
                 <Text className="text-white font-black uppercase tracking-widest text-xs">Simpan & Tutup</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ASSIGN TECHNICIAN MODAL */}
+      <Modal
+        visible={showAssignModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowAssignModal(false)}
+      >
+        <View className="flex-1 bg-black/60 items-center justify-end">
+          <View className="bg-white w-full rounded-t-[40px] p-8 shadow-2xl h-[85%]">
+            <View className="flex-row justify-between items-center mb-6">
+                <View>
+                    <Text className="text-2xl font-black text-slate-800">Assign Teknisi</Text>
+                    <Text className="text-slate-500 font-medium">Pilih teknisi yang akan bertugas</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowAssignModal(false)} className="bg-slate-100 p-2 rounded-full">
+                    <X size={24} color="#64748b" />
+                </TouchableOpacity>
+            </View>
+
+            {/* Search Tech */}
+            <View className={`flex-row items-center rounded-2xl px-4 py-3 mb-6 border transition-all ${focusedField === 'searchTech' ? 'bg-white border-blue-500 shadow-sm' : 'bg-slate-100 border-transparent'}`}>
+                <Search size={18} color={focusedField === 'searchTech' ? "#3b82f6" : "#94a3b8"} />
+                <TextInput 
+                    className="flex-1 ml-3 text-slate-700 font-medium border-0 outline-none p-0 bg-transparent"
+                    placeholder="Cari nama teknisi..."
+                    placeholderTextColor="#94a3b8"
+                    onFocus={() => setFocusedField('searchTech')}
+                    onBlur={() => setFocusedField(null)}
+                    value={searchTech}
+                    onChangeText={setSearchTech}
+                />
+            </View>
+
+            <ScrollView className="flex-1 mb-6" showsVerticalScrollIndicator={false}>
+                {techs.filter(t => t.full_name.toLowerCase().includes(searchTech.toLowerCase())).map(t => {
+                    const isSelected = selectedAssignees.includes(t.id);
+                    return (
+                        <TouchableOpacity 
+                            key={t.id}
+                            onPress={() => {
+                                if (isSelected) {
+                                    setSelectedAssignees(selectedAssignees.filter(id => id !== t.id));
+                                } else {
+                                    setSelectedAssignees([...selectedAssignees, t.id]);
+                                }
+                            }}
+                            className={`flex-row items-center p-4 rounded-2xl mb-3 border ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100'}`}
+                        >
+                            <View className={`w-10 h-10 rounded-xl items-center justify-center ${isSelected ? 'bg-blue-600' : 'bg-slate-100'}`}>
+                                <User size={20} color={isSelected ? "white" : "#64748b"} />
+                            </View>
+                            <View className="ml-4 flex-1">
+                                <Text className={`font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>{t.full_name}</Text>
+                                <Text className="text-slate-400 text-xs">{t.position_name}</Text>
+                            </View>
+                            <View className={`w-6 h-6 rounded-full border-2 items-center justify-center ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-200'}`}>
+                                {isSelected && <CheckCircle2 size={14} color="white" />}
+                            </View>
+                        </TouchableOpacity>
+                    );
+                })}
+            </ScrollView>
+
+            <View className="flex-row space-x-3">
+              <TouchableOpacity 
+                disabled={assigning}
+                onPress={() => setShowAssignModal(false)}
+                className="flex-1 bg-slate-100 py-5 rounded-[20px] items-center"
+              >
+                <Text className="text-slate-600 font-bold uppercase tracking-widest text-xs">Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                disabled={assigning}
+                onPress={handleAssignment}
+                className="flex-1 bg-blue-600 py-5 rounded-[20px] items-center shadow-lg shadow-blue-100"
+              >
+                {assigning ? (
+                    <ActivityIndicator color="white" size="small" />
+                ) : (
+                    <Text className="text-white font-black uppercase tracking-widest text-xs">Simpan Assignment</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

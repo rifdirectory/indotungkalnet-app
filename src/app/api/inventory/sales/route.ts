@@ -208,19 +208,31 @@ export async function PATCH(req: Request) {
         // A. Update Sale Status
         await db.query('UPDATE inventory_sales SET payment_status = "paid" WHERE id = ?', [saleId]);
 
-        // B. Update Associated Debt (if any)
-        await db.query(`
-            UPDATE debts 
-            SET paid_amount = total_amount 
-            WHERE title LIKE ? AND debt_type = 'receivable'
-        `, [`%#${sale.sale_number}%`]);
-
-        // C. Record Final Income Transaction
-        const trxDate = getJakartaToday();
-        await db.query(
-            'INSERT INTO transactions (trx_date, type, category_id, amount, status, notes) VALUES (?, "income", 11, ?, "completed", ?)',
-            [trxDate, sale.total_amount, `Pelunasan Invoice #${sale.sale_number}`]
+        // B. Grab Associated Debt to find Remaining Balance and Update it
+        const debtRows: any = await db.query(
+            "SELECT id, total_amount, paid_amount FROM debts WHERE title LIKE ? AND debt_type = 'receivable'",
+            [`%#${sale.sale_number}%`]
         );
+        let amountToRecord = Number(sale.total_amount);
+        
+        if (debtRows && debtRows.length > 0) {
+            const debt = debtRows[0];
+            amountToRecord = Number(debt.total_amount) - Number(debt.paid_amount);
+            
+            await db.query(
+                "UPDATE debts SET paid_amount = total_amount, status = 'settled' WHERE id = ?", 
+                [debt.id]
+            );
+        }
+
+        // C. Record Final Income Transaction ONLY for the remaining amount
+        if (amountToRecord > 0) {
+            const trxDate = getJakartaToday();
+            await db.query(
+                'INSERT INTO transactions (trx_date, type, category_id, amount, status, notes) VALUES (?, "income", 11, ?, "completed", ?)',
+                [trxDate, amountToRecord, `Pelunasan Invoice #${sale.sale_number}`]
+            );
+        }
 
         // D. Audit Log
         await logActivity(user || 'Admin', 'UPDATE', 'InventorySale', `SALE-${saleId}`, { status: 'paid', saleNumber: sale.sale_number });

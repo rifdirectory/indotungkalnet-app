@@ -343,40 +343,41 @@ export default function HistoryPage() {
             </Stack>
 
             <Card sx={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
-                <TableContainer sx={{ maxWidth: '100%', overflowX: 'auto' }}>
+                <TableContainer sx={{ maxHeight: 'calc(100vh - 250px)', maxWidth: '100%', overflowX: 'auto', '&::-webkit-scrollbar': { width: 8, height: 8 }, '&::-webkit-scrollbar-thumb': { bgcolor: alpha(theme.palette.primary.main, 0.2), borderRadius: 4 } }}>
                 <Table stickyHeader size="small">
                     <TableHead>
-                    <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
-                        <TableCell sx={{ fontWeight: 800, px: 4, position: 'sticky', left: 0, zIndex: 10, bgcolor: '#fff', minWidth: 220 }}>PEGAWAI</TableCell>
+                    <TableRow>
+                        <TableCell sx={{ fontWeight: 800, px: 4, position: 'sticky', left: 0, zIndex: 10, bgcolor: '#ffffff', minWidth: 220, borderBottom: '2px solid', borderColor: 'divider' }}>PEGAWAI</TableCell>
                         {viewMode === 'log' && (
                             <>
                                 {dateRange.start === dateRange.end ? (
                                     <>
-                                        <TableCell sx={{ fontWeight: 800 }}>MASUK</TableCell>
-                                        <TableCell sx={{ fontWeight: 800 }}>PULANG</TableCell>
-                                        <TableCell sx={{ fontWeight: 800 }}>BUKTI</TableCell>
+                                        <TableCell sx={{ fontWeight: 800, bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>MASUK</TableCell>
+                                        <TableCell sx={{ fontWeight: 800, bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>PULANG</TableCell>
+                                        <TableCell sx={{ fontWeight: 800, bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>BUKTI</TableCell>
                                     </>
                                 ) : (
                                     <>
-                                        <TableCell sx={{ fontWeight: 800 }}>WAKTU</TableCell>
-                                        <TableCell sx={{ fontWeight: 800 }}>TIPE</TableCell>
-                                        <TableCell sx={{ fontWeight: 800 }}>STATUS</TableCell>
-                                        <TableCell sx={{ fontWeight: 800 }}>LOKASI / FOTO</TableCell>
+                                        <TableCell sx={{ fontWeight: 800, bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>WAKTU</TableCell>
+                                        <TableCell sx={{ fontWeight: 800, bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>TIPE</TableCell>
+                                        <TableCell sx={{ fontWeight: 800, bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>STATUS</TableCell>
+                                        <TableCell sx={{ fontWeight: 800, bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>LOKASI / FOTO</TableCell>
                                     </>
                                 )}
-                                <TableCell sx={{ fontWeight: 800, px: 4 }}>CATATAN</TableCell>
+                                <TableCell sx={{ fontWeight: 800, px: 4, bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>CATATAN</TableCell>
                             </>
                         )}
                         {viewMode === 'summary' && (
                             <>
-                                <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>TEPAT WAKTU</TableCell>
-                                <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>TERLAMBAT</TableCell>
-                                <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>TOTAL MASUK</TableCell>
-                                <TableCell sx={{ fontWeight: 800, textAlign: 'center' }}>PERSENTASE</TableCell>
+                                <TableCell sx={{ fontWeight: 800, textAlign: 'center', bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>TEPAT WAKTU</TableCell>
+                                <TableCell sx={{ fontWeight: 800, textAlign: 'center', bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>TERLAMBAT</TableCell>
+                                <TableCell sx={{ fontWeight: 800, textAlign: 'center', bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>TOTAL MASUK</TableCell>
+                                <TableCell sx={{ fontWeight: 800, textAlign: 'center', bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>PERSENTASE</TableCell>
+                                <TableCell sx={{ fontWeight: 800, textAlign: 'center', bgcolor: '#f8f9fa', borderBottom: '2px solid', borderColor: 'divider' }}>TOTAL LEMBUR</TableCell>
                             </>
                         )}
                         {viewMode === 'grid' && getGridDays().map(day => (
-                            <TableCell key={day.num} sx={{ textAlign: 'center', p: 1, minWidth: 80, bgcolor: day.isHoliday ? alpha(theme.palette.error.main, 0.03) : 'inherit' }}>
+                            <TableCell key={day.num} sx={{ textAlign: 'center', p: 1, minWidth: 80, bgcolor: day.isHoliday ? '#fff0f0' : '#f8f9fa', borderBottom: day.isHoliday ? '3px solid' : '2px solid', borderColor: day.isHoliday ? 'error.main' : 'divider' }}>
                                 <Typography variant="caption" sx={{ fontWeight: 900, color: day.isHoliday ? 'error.main' : 'text.secondary' }}>{day.name}</Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 900, color: day.isHoliday ? 'error.main' : 'text.primary' }}>{day.num}</Typography>
                             </TableCell>
@@ -663,6 +664,11 @@ export default function HistoryPage() {
                                             </Typography>
                                         </Box>
                                     </TableCell>
+                                    <TableCell sx={{ textAlign: 'center' }}>
+                                        <Typography variant="body2" sx={{ fontWeight: 800, color: 'warning.dark' }}>
+                                            {log.total_overtime_minutes > 0 ? `${Math.floor(log.total_overtime_minutes / 60)}j ${log.total_overtime_minutes % 60}m` : '-'}
+                                        </Typography>
+                                    </TableCell>
                                 </>
                             )}
                             </TableRow>
@@ -670,7 +676,7 @@ export default function HistoryPage() {
                     )}
                     {history.length === 0 && (
                         <TableRow>
-                        <TableCell colSpan={ viewMode === 'grid' ? 32 : (viewMode === 'log' ? 6 : 5) } align="center" sx={{ py: 10 }}>
+                        <TableCell colSpan={ viewMode === 'grid' ? 32 : (viewMode === 'log' ? 6 : 6) } align="center" sx={{ py: 10 }}>
                             <Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>Belum ada data kehadiran pada periode ini.</Typography>
                         </TableCell>
                         </TableRow>

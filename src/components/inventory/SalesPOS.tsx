@@ -22,6 +22,7 @@ import {
   ChevronRight as ArrowIcon
 } from "@mui/icons-material";
 import { motion, AnimatePresence } from 'framer-motion';
+import { safeFetch } from '@/lib/fetchUtils';
 
 export default function SalesPOS({ items: initialItems, customers: initialCustomers }: { items: any[], customers: any[] }) {
     const theme = useTheme();
@@ -80,7 +81,7 @@ export default function SalesPOS({ items: initialItems, customers: initialCustom
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch('/api/inventory/sales', {
+            const { success, data, message: errMessage } = await safeFetch('/api/inventory/sales', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -97,8 +98,8 @@ export default function SalesPOS({ items: initialItems, customers: initialCustom
                     user: 'Admin'
                 })
             });
-            const data = await res.json();
-            if (data.success) {
+            
+            if (success && data?.success) {
                 setSuccess(`Berhasil! #${data.saleId}`);
                 setCart([]);
                 setSelectedCustomer(null);
@@ -106,7 +107,7 @@ export default function SalesPOS({ items: initialItems, customers: initialCustom
                 if (window) window.dispatchEvent(new CustomEvent('inventory-updated'));
                 setTimeout(() => setSuccess(null), 5000);
             } else {
-                throw new Error(data.message);
+                throw new Error(errMessage || data?.message || 'Gagal memproses penjualan');
             }
         } catch (err: any) {
             setError(err.message);

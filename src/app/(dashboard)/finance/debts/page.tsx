@@ -57,7 +57,10 @@ export default function DebtsPage() {
 
   const [openAdd, setOpenAdd] = useState(false);
   const [openPay, setOpenPay] = useState(false);
+  const [openBulkPay, setOpenBulkPay] = useState(false);
   const [selectedDebt, setSelectedDebt] = useState<any>(null);
+  const [selectedGroup, setSelectedGroup] = useState<any>(null);
+  const [detailEntityId, setDetailEntityId] = useState<string | null>(null);
   const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
 
   // Filter State
@@ -76,8 +79,13 @@ export default function DebtsPage() {
     total_amount: '',
     description: '',
     due_date: '',
-    create_transaction: true
+    create_transaction: true,
+    amount: '',
+    notes: ''
   });
+
+  const [bulkAmount, setBulkAmount] = useState('');
+  const [bulkNotes, setBulkNotes] = useState('');
 
   const [payData, setPayData] = useState({
     amount: '',
@@ -179,24 +187,36 @@ export default function DebtsPage() {
     }
   };
 
-  const handlePayment = async () => {
+  const handlePay = async () => {
     try {
-        const res = await fetch('/api/finances/debts/payment', {
+        await fetch('/api/finances/debts/payment', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                debt_id: selectedDebt.id,
+                debt_id: selectedDebt?.id,
                 amount: payData.amount,
-                description: payData.description
+                notes: payData.description
             })
         });
-        if((await res.json()).success) {
-            setOpenPay(false);
-            fetchDebts();
-        }
-    } catch (err) {
-        console.error(err);
-    }
+        fetchDebts();
+        setOpenPay(false);
+    } catch(e) { console.error(e); }
+  };
+
+  const handleBulkPay = async () => {
+    try {
+        await fetch('/api/finances/debts/bulk-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                debt_ids: selectedGroup.ids,
+                amount: bulkAmount,
+                description: bulkNotes
+            })
+        });
+        fetchDebts();
+        setOpenBulkPay(false);
+    } catch(e) { console.error(e); }
   };
 
   const formatCurrency = (val: number) => {
@@ -302,7 +322,7 @@ export default function DebtsPage() {
       </Grid>
 
       <Card sx={{ borderRadius: 4, mb: 4 }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ px: 2, pt: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Tabs value={tab} onChange={(_, v) => { setTab(v); setDetailEntityId(null); }} sx={{ px: 2, pt: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Tab label="Piutang (Kasbon & Lainnya)" sx={{ fontWeight: 700, textTransform: 'none' }} />
           <Tab label="Hutang Perusahaan (Bank & Vendor)" sx={{ fontWeight: 700, textTransform: 'none' }} />
           <Tab label="Piutang Logistik (Data Pelanggan)" sx={{ fontWeight: 700, textTransform: 'none' }} />
@@ -323,8 +343,130 @@ export default function DebtsPage() {
             <TableBody>
               {loading ? (
                 <TableRow><TableCell colSpan={6} align="center" sx={{ py: 10 }}><CircularProgress /></TableCell></TableRow>
-              ) : debts.map((d) => {
-                const remaining = d.total_amount - d.paid_amount;
+              ) : (() => {
+                if (detailEntityId === null) {
+                    const grouped = debts.reduce((acc: any, curr: any) => {
+                        const key = curr.entity_id ? `emp_${curr.entity_id}` : `name_${curr.entity_name || 'Tanpa Nama'}`;
+                        if (!acc[key]) {
+                            acc[key] = {
+                                key: key,
+                                entity_name: curr.entity_name,
+                                total_amount: 0,
+                                paid_amount: 0,
+                                count: 0,
+                                ids: []
+                            };
+                        }
+                        acc[key].total_amount += Number(curr.total_amount);
+                        acc[key].paid_amount += Number(curr.paid_amount);
+                        acc[key].count += 1;
+                        if (curr.status === 'active') {
+                            acc[key].ids.push(curr.id);
+                        }
+                        return acc;
+                    }, {});
+
+                    return Object.values(grouped).map((g: any, i) => {
+                        const remaining = g.total_amount - g.paid_amount;
+                        const progress = Math.min((g.paid_amount / g.total_amount) * 100, 100);
+                        
+                        let ThemeIcon = PeopleIcon;
+                        let iconColor = 'rgba(59, 130, 246, 0.1)';
+                        let textColor = 'primary.main';
+                        let chipLabel = 'Record Pinjaman';
+                        let chipColor = 'primary';
+                        
+                        if (tab === 1) {
+                            ThemeIcon = BankIcon;
+                            iconColor = 'rgba(234, 179, 8, 0.1)';
+                            textColor = 'warning.main';
+                            chipLabel = 'Faktur/Tagihan';
+                            chipColor = 'warning';
+                        } else if (tab === 2) {
+                            ThemeIcon = PeopleIcon;
+                            iconColor = 'rgba(6, 182, 212, 0.1)';
+                            textColor = 'info.main';
+                            chipLabel = 'Faktur Penjualan';
+                            chipColor = 'info';
+                        }
+
+                        return (
+                            <TableRow key={`grp-${i}`} hover>
+                                <TableCell>
+                                  <Stack direction="row" spacing={1.5} alignItems="center">
+                                      <Box sx={{ p: 1, bgcolor: iconColor, borderRadius: 2, color: textColor, display: 'flex' }}>
+                                          <ThemeIcon size={18} />
+                                      </Box>
+                                      <Box>
+                                          <Typography sx={{ fontWeight: 800, fontSize: '0.95rem' }}>{g.entity_name || 'Lainnya'}</Typography>
+                                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>Total Akumulasi</Typography>
+                                      </Box>
+                                  </Stack>
+                                </TableCell>
+                                <TableCell>
+                                    <Chip label={`${g.count} ${chipLabel}`} size="small" color={chipColor as any} variant="outlined" sx={{ fontWeight: 700 }} />
+                                </TableCell>
+                                <TableCell sx={{ fontWeight: 700 }}>{formatCurrency(g.total_amount)}</TableCell>
+                                <TableCell sx={{ fontWeight: 800, color: remaining > 0 ? 'warning.dark' : 'success.main' }}>
+                                    {formatCurrency(remaining)}
+                                </TableCell>
+                                <TableCell sx={{ width: 200 }}>
+                                    <Stack spacing={1}>
+                                        <LinearProgress variant="determinate" value={progress} sx={{ height: 6, borderRadius: 3 }} />
+                                        <Typography variant="caption" sx={{ fontWeight: 700 }}>{progress.toFixed(0)}% {tab === 1 ? 'Lunas' : 'Terbayar'}</Typography>
+                                    </Stack>
+                                </TableCell>
+                                <TableCell align="right">
+                                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                      {remaining > 0 && g.ids && g.ids.length > 0 && (
+                                          <Button 
+                                              size="small" 
+                                              variant="contained" 
+                                              color="primary"
+                                              startIcon={<PayIcon size={14} />}
+                                              onClick={() => {
+                                                  setSelectedGroup(g);
+                                                  setBulkAmount(remaining.toString());
+                                                  setBulkNotes(`Pembayaran Cicilan: ${g.entity_name || 'Tanpa Nama'}`);
+                                                  setOpenBulkPay(true);
+                                              }}
+                                              sx={{ borderRadius: 2, fontWeight: 700 }}
+                                          >
+                                              Bayar Cepat
+                                          </Button>
+                                      )}
+                                      <Button 
+                                          size="small" 
+                                          variant="outlined" 
+                                          onClick={() => setDetailEntityId(g.key)}
+                                          sx={{ borderRadius: 2, fontWeight: 700 }}
+                                      >
+                                          Lihat Rincian
+                                      </Button>
+                                    </Stack>
+                                </TableCell>
+                            </TableRow>
+                        );
+                    });
+                } else {
+                  const displayDebts = (detailEntityId !== null) 
+                      ? debts.filter(d => {
+                          const k = d.entity_id ? `emp_${d.entity_id}` : `name_${d.entity_name || 'Tanpa Nama'}`;
+                          return k === detailEntityId;
+                        })
+                      : debts;
+
+                  return (
+                    <>
+                      {detailEntityId !== null && (
+                          <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.05) }}>
+                              <TableCell colSpan={6}>
+                                  <Button size="small" startIcon={<BackIcon size={16}/>} onClick={() => setDetailEntityId(null)} sx={{ fontWeight: 800 }}>Kembali ke Ringkasan</Button>
+                              </TableCell>
+                          </TableRow>
+                      )}
+                      {displayDebts.map((d) => {
+                        const remaining = d.total_amount - d.paid_amount;
                 const progress = Math.min((d.paid_amount / d.total_amount) * 100, 100);
                 return (
                   <TableRow key={d.id} hover>
@@ -377,7 +519,7 @@ export default function DebtsPage() {
                                 size="small" 
                                 variant="outlined" 
                                 startIcon={<PayIcon size={14} />}
-                                onClick={() => { setSelectedDebt(d); setFormData({ ...formData, notes: '' }); setOpenPay(true); }}
+                                onClick={() => { setSelectedDebt(d); setPayData({ amount: remaining.toString(), description: `Cicilan Piutang: ${d.entity_name || 'Tanpa Nama'} - ${d.title}` }); setOpenPay(true); }}
                                 sx={{ borderRadius: 2, fontWeight: 700 }}
                             >
                                 Bayar
@@ -387,7 +529,11 @@ export default function DebtsPage() {
                     </TableCell>
                   </TableRow>
                 );
-              })}
+                      })}
+                    </>
+                  );
+                }
+              })()}
               {!loading && debts.length === 0 && (
                 <TableRow><TableCell colSpan={6} align="center" sx={{ py: 10 }}><Typography color="text.secondary">Belum ada catatan {tab === 0 ? 'piutang' : 'hutang'}.</Typography></TableCell></TableRow>
               )}
@@ -515,7 +661,7 @@ export default function DebtsPage() {
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
             <Button onClick={() => setOpenPay(false)}>Batal</Button>
-            <Button onClick={handlePayment} variant="contained" sx={{ fontWeight: 800 }}>Catat Pembayaran</Button>
+            <Button onClick={handlePay} variant="contained" sx={{ fontWeight: 800 }}>Catat Pembayaran</Button>
         </DialogActions>
       </Dialog>
 
@@ -551,6 +697,42 @@ export default function DebtsPage() {
             >
                 Terapkan
             </Button>
+        </DialogActions>
+      </Dialog>
+      {/* BULK PAYMENT MODAL */}
+      <Dialog open={openBulkPay} onClose={() => setOpenBulkPay(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight: 800 }}>Bayar Akumulasi (FIFO)</DialogTitle>
+        <DialogContent dividers>
+            <Box sx={{ p: 2, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 2, mb: 3 }}>
+                <Typography variant="body2" color="text.secondary">Membayar Untuk:</Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '1.1rem', mt: 0.5 }}>{selectedGroup?.entity_name}</Typography>
+                <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mt: 1 }}>
+                    Sisa Total Tagihan: {formatCurrency(Number(selectedGroup?.total_amount || 0) - Number(selectedGroup?.paid_amount || 0))}
+                </Typography>
+                <Typography variant="caption" color="primary" sx={{ display: 'block', mt: 0.5 }}>
+                    INFO: Sistem akan otomatis mendistribusikan uang ini untuk memotong catatan hutang yang paling lama terlebih dahulu secara berurutan.
+                </Typography>
+            </Box>
+            <Stack spacing={3}>
+                <TextField 
+                    label="Jumlah Uang Pembayaran (Rp)" 
+                    fullWidth 
+                    type="number"
+                    value={bulkAmount}
+                    onChange={(e) => setBulkAmount(e.target.value)}
+                    InputProps={{ sx: { fontWeight: 700 } }}
+                />
+                <TextField 
+                    label="Keterangan Laporan Keseluruhan" 
+                    fullWidth 
+                    value={bulkNotes}
+                    onChange={(e) => setBulkNotes(e.target.value)}
+                />
+            </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setOpenBulkPay(false)} sx={{ fontWeight: 700 }}>Batal</Button>
+            <Button onClick={handleBulkPay} variant="contained" disabled={!bulkAmount || Number(bulkAmount) <= 0} sx={{ fontWeight: 700 }}>Pecah & Simpan</Button>
         </DialogActions>
       </Dialog>
     </Box>

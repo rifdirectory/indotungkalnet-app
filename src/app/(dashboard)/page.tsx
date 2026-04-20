@@ -1,262 +1,216 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-
 import { 
   Box, 
-  Grid, 
   Typography, 
-  Card, 
-  Button, 
   Stack, 
-  IconButton,
   alpha,
   useTheme,
-  Chip
+  Button
 } from "@mui/material";
 import { 
-  People as PeopleIcon, 
-  TrendingUp as TrendingUpIcon, 
-  TrendingDown as TrendingDownIcon, 
-  AttachMoney as MoneyIcon,
-  Inventory as InventoryIcon,
-  Headphones as SupportIcon,
-  ArrowForward as ArrowForwardIcon
+  Settings as SettingsIcon,
+  People as PeopleIcon,
+  ConfirmationNumber as TicketIcon,
+  AccountBalanceWallet as FinanceIcon
 } from "@mui/icons-material";
-const stats = [
-  { 
-    label: "Total Customer", 
-    value: "0", 
-    change: "+0%", 
-    trend: "up", 
-    icon: <PeopleIcon />,
-    color: "#3b82f6"
-  },
-  { 
-    label: "Revenue (MTD)", 
-    value: "Rp 0", 
-    change: "+0%", 
-    trend: "up", 
-    icon: <MoneyIcon />,
-    color: "#10b981"
-  },
-  { 
-    label: "Active Tickets", 
-    value: "0", 
-    change: "0", 
-    trend: "down", 
-    icon: <SupportIcon />,
-    color: "#f59e0b"
-  },
-  { 
-    label: "Inventory Status", 
-    value: "0%", 
-    change: "Normal", 
-    trend: "up", 
-    icon: <InventoryIcon />,
-    color: "#6366f1"
-  },
-];
+import Link from 'next/link';
+import { getUserSessionAction, getMenuPermissionsAction } from '@/actions/permissions';
 
 export default function Dashboard() {
   const theme = useTheme();
-  const [dashboardStats, setDashboardStats] = useState(stats);
-  const [recentTickets, setRecentTickets] = useState<any[]>([]);
+  const [user, setUser] = useState<any>(null);
+  const [allowedKeys, setAllowedKeys] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchUserAndPermissions = async () => {
+      setLoading(true);
       try {
-        const [statsRes, ticketRes] = await Promise.all([
-          fetch('/api/dashboard-stats').then(r => r.json()),
-          fetch('/api/support').then(r => r.json()),
+        // 1. Get Session
+        const sessionRes = await getUserSessionAction();
+        if (!sessionRes.success || !sessionRes.user) return;
+        
+        const me = sessionRes.user;
+        setUser(me);
+
+        // 2. Get Permissions (Same logic as Sidebar)
+        const [rolePermRes, userPermRes] = await Promise.all([
+          getMenuPermissionsAction(me.role),
+          me.userId ? getMenuPermissionsAction(undefined, me.userId) : Promise.resolve({ success: true, permissions: [] })
         ]);
 
-        if (statsRes.success) {
-          const s = statsRes.data;
-          const newStats = [...stats];
-          newStats[0].value = s.totalCustomers.toLocaleString();
-          newStats[1].value = `Rp ${(s.revenue / 1000000).toFixed(1)}M`;
-          newStats[2].value = s.activeTickets.toString();
-          newStats[3].value = `${s.inventoryStatus}%`;
-          setDashboardStats(newStats);
-        }
+        if (me.role === 'admin') {
+          // Admin sees everything
+          setAllowedKeys(['customers', 'support', 'finance', 'settings', 'maintenance', 'inventory', 'presence', 'notifications']);
+        } else {
+          const perms: Record<string, number> = {};
+          
+          // 1. Initialize all dashboard keys as enabled (1) by default
+          const dashboardKeys = ['customers', 'support', 'finance', 'settings'];
+          dashboardKeys.forEach(k => perms[k] = 1);
 
-        if (ticketRes.success) {
-          const tickets = Array.isArray(ticketRes.data) ? ticketRes.data : [];
-          setRecentTickets(tickets.slice(0, 5));
+          // 2. Role perms override
+          if (rolePermRes.success && rolePermRes.permissions) {
+            rolePermRes.permissions.forEach((p: any) => {
+              if (p.platform === 'web') perms[p.menu_key] = p.is_enabled;
+            });
+          }
+
+          // 3. User perms override
+          if (userPermRes.success && userPermRes.permissions) {
+            userPermRes.permissions.forEach((p: any) => {
+              if (p.platform === 'web') perms[p.menu_key] = p.is_enabled;
+            });
+          }
+          
+          const enabled = Object.keys(perms).filter(key => perms[key] === 1);
+          setAllowedKeys(enabled);
         }
       } catch (err) {
-        console.error('Failed to fetch dashboard data:', err);
+        console.error('Failed to fetch user permissions:', err);
+      } finally {
+        setLoading(false);
       }
     };
-
-    fetchDashboardData();
+    fetchUserAndPermissions();
   }, []);
 
+  const quickAccessItems = [
+    { key: 'customers', label: 'Data Customer', icon: <PeopleIcon />, href: '/customers', color: '#3b82f6' },
+    { key: 'support', label: 'Tiket Support', icon: <TicketIcon />, href: '/support', color: '#f59e0b' },
+    { key: 'finance', label: 'Keuangan', icon: <FinanceIcon />, href: '/finance', color: '#10b981' },
+    { key: 'settings', label: 'Pengaturan', icon: <SettingsIcon />, href: '/settings', color: '#6366f1' },
+  ].filter(item => allowedKeys.includes(item.key));
+
+  if (loading) return null;
+
   return (
-    <Box sx={{ px: { xs: 3, md: 5 }, pt: 2 }}>
+    <Box sx={{ 
+      px: { xs: 3, md: 5 }, 
+      pt: 4, 
+      pb: 10,
+      minHeight: '80vh',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      textAlign: 'center'
+    }}>
+      {/* Background Decorative Elements */}
+      <Box sx={{
+        position: 'absolute',
+        top: '10%',
+        left: '20%',
+        width: 300,
+        height: 300,
+        borderRadius: '50%',
+        background: `radial-gradient(circle, ${alpha(theme.palette.primary.main, 0.15)} 0%, transparent 70%)`,
+        zIndex: -1,
+        filter: 'blur(40px)',
+      }} />
+      <Box sx={{
+        position: 'absolute',
+        bottom: '20%',
+        right: '25%',
+        width: 250,
+        height: 250,
+        borderRadius: '50%',
+        background: `radial-gradient(circle, ${alpha('#10b981', 0.1)} 0%, transparent 70%)`,
+        zIndex: -1,
+        filter: 'blur(40px)',
+      }} />
 
-      <Grid container spacing={3} sx={{ mb: 5 }}>
-        {dashboardStats.map((stat: any, i: number) => (
-          <Grid size={{ xs: 12, sm: 6, lg: 3 }} key={stat.label}>
-              <Card sx={{ 
-                p: 3, 
-                position: 'relative', 
-                overflow: 'hidden',
-                borderRadius: 3,
-                '&:hover': { borderColor: '#bdc1c6' }
-              }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
-                  <Box sx={{ 
-                    p: 1.5, 
-                    borderRadius: 3, 
-                    bgcolor: alpha(stat.color, 0.1), 
-                    color: stat.color,
-                    display: 'flex'
-                  }}>
-                    {stat.icon}
-                  </Box>
-                  <Chip 
-                    label={stat.change}
-                    size="small"
-                    icon={stat.trend === "up" ? <TrendingUpIcon sx={{ fontSize: '14px !important' }} /> : <TrendingDownIcon sx={{ fontSize: '14px !important' }} />}
-                    sx={{ 
-                      height: 24,
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      bgcolor: alpha(stat.trend === "up" ? theme.palette.success.main : theme.palette.error.main, 0.1),
-                      color: stat.trend === "up" ? 'success.main' : 'error.main',
-                      border: 'none',
-                      '& .MuiChip-icon': { color: 'inherit', ml: 0.5 }
-                    }}
-                  />
-                </Stack>
-                <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600 }}>{stat.label}</Typography>
-                <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5 }}>{stat.value}</Typography>
-              </Card>
-          </Grid>
-        ))}
-      </Grid>
+      {/* Welcome Message Section */}
+      <Box sx={{ mb: 6 }}>
+        <Typography 
+          variant="h2" 
+          sx={{ 
+            fontWeight: 900, 
+            mb: 2, 
+            letterSpacing: '-0.04em',
+            background: `linear-gradient(135deg, ${theme.palette.text.primary} 30%, ${alpha(theme.palette.text.primary, 0.6)} 100%)`,
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
+          Selamat Datang, {user?.username === 'admin' ? 'Administrator' : (user?.username || '...')}!
+        </Typography>
+        <Typography 
+          variant="h6" 
+          color="text.secondary" 
+          sx={{ 
+            fontWeight: 500, 
+            maxWidth: 600, 
+            mx: 'auto',
+            lineHeight: 1.6,
+            opacity: 0.8
+          }}
+        >
+          Selamat bekerja di Dashboard Manajemen **PT. Indo Tungkal Net**. 
+          Pilih menu navigasi di sebelah kiri untuk mulai mengelola operasional hari ini.
+        </Typography>
+      </Box>
 
-      <Grid container spacing={4}>
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <Card sx={{ p: 4, height: '100%', borderRadius: 3 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <SupportIcon color="primary" />
-                Tiket Hari Ini
-              </Typography>
-              <Button 
-                size="small" 
-                sx={{ fontWeight: 600 }}
-                component={Link}
-                href="/support"
-              >
-                Lihat Semua
-              </Button>
-            </Stack>
-            
-            <Box sx={{ mt: 3 }}>
-              {recentTickets.length === 0 ? (
-                <Box sx={{ 
-                  py: 8, 
-                  textAlign: 'center', 
-                  bgcolor: '#f1f3f4', 
-                  borderRadius: 1,
-                  border: '1px dashed',
-                  borderColor: 'divider'
-                }}>
-                  <Typography variant="body2" color="text.secondary">Tidak ada tiket aktif</Typography>
-                </Box>
-              ) : (
-                <Stack spacing={2}>
-                  {recentTickets.map((ticket) => (
-                    <Box key={ticket.id} sx={{ 
-                      p: 2, 
-                      borderRadius: 3, 
-                      bgcolor: '#f1f3f4', 
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <Stack direction="row" spacing={3} alignItems="center">
-                        <Box sx={{ width: 4, height: 40, borderRadius: 3, bgcolor: ticket.priority === 'High' ? 'error.main' : 'warning.main' }} />
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{ticket.subject}</Typography>
-                          <Typography variant="caption" color="text.secondary">{ticket.customer_name} • {ticket.created_time_str}</Typography>
-                        </Box>
-                      </Stack>
-                      <Chip 
-                        label={ticket.status} 
-                        size="small" 
-                        sx={{ 
-                          height: 22, 
-                          fontSize: '0.625rem', 
-                          fontWeight: 800,
-                          bgcolor: alpha(ticket.status === 'Open' ? theme.palette.warning.main : theme.palette.primary.main, 0.1),
-                          color: ticket.status === 'Open' ? 'warning.main' : 'primary.main',
-                          border: '1px solid'
-                        }} 
-                      />
-                    </Box>
-                  ))}
-                </Stack>
-              )}
+      {/* Quick Access Grid (Glassmorphism) */}
+      <Stack 
+        direction={{ xs: 'column', md: 'row' }} 
+        spacing={3} 
+        sx={{ width: '100%', maxWidth: 800 }}
+      >
+        {quickAccessItems.map((item) => (
+          <Button
+            key={item.label}
+            component={Link}
+            href={item.href}
+            variant="outlined"
+            sx={{
+              flex: 1,
+              p: 3,
+              borderRadius: 5,
+              borderColor: alpha(theme.palette.divider, 0.5),
+              background: alpha('#fff', 0.05),
+              backdropFilter: 'blur(10px)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              textTransform: 'none',
+              '&:hover': {
+                transform: 'translateY(-8px)',
+                borderColor: item.color,
+                background: alpha(item.color, 0.03),
+                boxShadow: `0 12px 40px ${alpha(item.color, 0.1)}`,
+                '& .icon-box': {
+                  bgcolor: item.color,
+                  color: '#fff',
+                }
+              }
+            }}
+          >
+            <Box className="icon-box" sx={{ 
+              p: 2, 
+              borderRadius: 4, 
+              bgcolor: alpha(item.color, 0.1), 
+              color: item.color,
+              display: 'flex',
+              transition: 'inherit'
+            }}>
+              {item.icon}
             </Box>
-          </Card>
-        </Grid>
-
-        <Grid size={{ xs: 12, lg: 4 }}>
-          <Card sx={{ p: 4, height: '100%', borderRadius: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 700, mb: 4, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <TrendingUpIcon sx={{ color: 'primary.main' }} />
-              Billing Alerts
+            <Typography variant="body1" sx={{ fontWeight: 700, color: 'text.primary' }}>
+              {item.label}
             </Typography>
-            
-            <Stack spacing={2}>
-              {[
-                { user: "Andi Permana", status: "Overdue", amount: "Rp 255.000", color: 'error.main' },
-                { user: "Siti Rahma", status: "Expiring Today", amount: "Rp 350.000", color: 'warning.main' },
-                { user: "Toko Berkah", status: "Auto-pay Scheduled", amount: "Rp 1.200.000", color: 'info.main' },
-              ].map((bill, i) => (
-                <Box key={i} sx={{ 
-                  p: 2, 
-                  borderRadius: 3, 
-                  bgcolor: '#f1f3f4', 
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{bill.user}</Typography>
-                    <Typography variant="caption" sx={{ color: bill.color, fontWeight: 600 }}>{bill.status}</Typography>
-                  </Box>
-                  <Typography variant="body2" sx={{ fontWeight: 800 }}>{bill.amount}</Typography>
-                </Box>
-              ))}
-            </Stack>
-            
-            <Button 
-              fullWidth 
-              sx={{ 
-                mt: 3, 
-                color: 'primary.main', 
-                fontSize: '0.75rem', 
-                fontWeight: 700,
-                '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' }
-              }}
-              endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
-            >
-              Lihat Semua Tagihan
-            </Button>
-          </Card>
-        </Grid>
-      </Grid>
+          </Button>
+        ))}
+      </Stack>
+
+      <Box sx={{ mt: 8, opacity: 0.5 }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          ITNET Management System 1.0 Beta
+        </Typography>
+      </Box>
     </Box>
   );
 }

@@ -98,14 +98,21 @@ export async function GET(req: Request) {
                     e.id as employee_id, e.full_name as employee_name, p.name as position_name,
                     COUNT(DISTINCT CASE WHEN a.type = 'clock_in' THEN DATE(a.timestamp) END) as total_days,
                     SUM(CASE WHEN a.type = 'clock_in' AND a.status = 'on_time' THEN 1 ELSE 0 END) as on_time_count,
-                    SUM(CASE WHEN a.type = 'clock_in' AND a.status = 'late' THEN 1 ELSE 0 END) as late_count
+                    SUM(CASE WHEN a.type = 'clock_in' AND a.status = 'late' THEN 1 ELSE 0 END) as late_count,
+                    COALESCE(ov.total_overtime_minutes, 0) as total_overtime_minutes
                 FROM employees e
                 LEFT JOIN positions p ON e.position_id = p.id
                 LEFT JOIN attendance a ON (e.id = a.employee_id AND DATE(a.timestamp) BETWEEN ? AND ?)
+                LEFT JOIN (
+                    SELECT employee_id, SUM(duration_minutes) as total_overtime_minutes
+                    FROM overtime_requests
+                    WHERE status = 'approved' AND date BETWEEN ? AND ?
+                    GROUP BY employee_id
+                ) ov ON e.id = ov.employee_id
                 WHERE e.status = 'active'
-                GROUP BY e.id, e.full_name, p.name
+                GROUP BY e.id, e.full_name, p.name, ov.total_overtime_minutes
                 ORDER BY e.full_name ASC
-            `, [start, end])) as any[];
+            `, [start, end, start, end])) as any[];
         } else {
             // DASHBOARD MODE (Range): List of events
             history = (await query(`

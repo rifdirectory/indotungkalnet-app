@@ -158,8 +158,8 @@ export default function SupportPageContent() {
           
           // Calculate stats
           const total = fetchedTickets.length;
-          const pending = fetchedTickets.filter((t: any) => t.status === 'Open' || t.status === 'In Progress').length;
-          const resolved = fetchedTickets.filter((t: any) => t.status === 'Resolved' || t.status === 'Closed').length;
+          const pending = fetchedTickets.filter((t: any) => t.status === 'Open' || t.status === 'OTW' || t.status === 'Sedang Dikerjakan').length;
+          const resolved = fetchedTickets.filter((t: any) => t.status === 'Sudah Diperbaiki' || t.status === 'Selesai').length;
           setStats({ total, pending, resolved });
         }
       });
@@ -1139,7 +1139,7 @@ export default function SupportPageContent() {
                   onClick={() => handleStatusUpdate(
                     selectedTicket.status === 'Open' ? 'OTW' :
                     selectedTicket.status === 'OTW' ? 'Sedang Dikerjakan' :
-                    selectedTicket.status === 'Sedang Dikerjakan' ? 'Resolved' : 'Selesai'
+                    selectedTicket.status === 'Sedang Dikerjakan' ? 'Sudah Diperbaiki' : 'Selesai'
                   )}
                   sx={{ height: 45, px: 4, borderRadius: 2.5, fontWeight: 900 }}
                 >
@@ -1147,7 +1147,7 @@ export default function SupportPageContent() {
                     selectedTicket.status === 'Open' ? 'OTW KE LOKASI' :
                     selectedTicket.status === 'OTW' ? 'MULAI KERJAKAN' :
                     selectedTicket.status === 'Sedang Dikerjakan' ? 'TANDAI SELESAI' :
-                    selectedTicket.status === 'Resolved' ? 'TUTUP TIKET' : 'PROSES'
+                    selectedTicket.status === 'Sudah Diperbaiki' ? 'TUTUP TIKET' : 'PROSES'
                   }
                 </Button>
               )}

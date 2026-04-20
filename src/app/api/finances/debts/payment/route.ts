@@ -44,6 +44,14 @@ export async function POST(request: Request) {
       [newPaidAmount, newStatus, debt_id]
     );
 
+    // 4. Synchronization: If this debt is linked to a Sales Invoice and is now FULLY SETTLED, auto-mark the Invoice as PAID
+    if (newStatus === 'settled' && debt.title.includes('#INV/LOG/')) {
+        const titleMatch = debt.title.match(/(INV\/LOG\/[^\s:]+)/);
+        if (titleMatch && titleMatch[1]) {
+            await db.query('UPDATE inventory_sales SET payment_status = "paid" WHERE sale_number = ?', [titleMatch[1]]);
+        }
+    }
+
     return NextResponse.json({ success: true, message: 'Payment recorded and balance updated' });
   } catch (error) {
     console.error('API Error:', error);

@@ -121,6 +121,11 @@ export default function LoginPage() {
             </Button>
           </Box>
         </form>
+        <Box sx={{ mt: 4, opacity: 0.5, textAlign: 'center' }}>
+          <Typography variant="caption" sx={{ fontWeight: 600, letterSpacing: '0.05em' }}>
+            V1.0 BETA
+          </Typography>
+        </Box>
       </Card>
     </Box>
   );

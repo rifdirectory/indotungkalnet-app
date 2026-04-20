@@ -69,7 +69,6 @@ export default function AddTicketScreen() {
           const techList = empRes.data.data.filter((e: any) => 
             (e.position_name?.toLowerCase().includes('teknisi') || 
              e.position_name?.toLowerCase().includes('noc')) && 
-            e.full_name !== 'Wisnu Rachmawan' &&
             e.current_status !== 'Off' &&
             e.current_status !== 'Izin'
           );
@@ -152,7 +151,16 @@ export default function AddTicketScreen() {
         style={{ paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 10 }}
         className="px-6 pb-4 bg-white border-b border-slate-50 flex-row items-center justify-between"
       >
-        <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
+        <TouchableOpacity 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(drawer)/tickets');
+            }
+          }} 
+          className="p-2 -ml-2"
+        >
             <ArrowLeft size={24} color="#334155" />
         </TouchableOpacity>
         <Text className="text-slate-800 text-lg font-extrabold tracking-tight">Buat Tiket Baru</Text>

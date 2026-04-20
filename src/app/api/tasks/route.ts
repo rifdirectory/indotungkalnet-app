@@ -25,7 +25,14 @@ export async function GET(req: Request) {
                         s.subject as title,
                         'ticket' as type,
                         s.phone_number,
-                        CONCAT(s.customer_name, ' (', s.phone_number, ')') as customer_info,
+                        CONCAT(
+                            CASE 
+                                WHEN s.customer_name IS NOT NULL AND s.customer_name != '' THEN s.customer_name 
+                                WHEN s.category LIKE '%Mainten%' THEN CONCAT('Maintenance: ', s.subject)
+                                ELSE 'Pelanggan Umum'
+                            END, 
+                            IF(s.phone_number IS NOT NULL AND s.phone_number != '', CONCAT(' (', s.phone_number, ')'), '')
+                        ) as customer_info,
                         (SELECT GROUP_CONCAT(e3.full_name SEPARATOR ', ') 
                          FROM ticket_assignees sa3 
                          JOIN employees e3 ON sa3.employee_id = e3.id 
@@ -108,13 +115,21 @@ export async function GET(req: Request) {
             const ticketsPart = `
                 SELECT 
                     s.id, s.subject as title, s.description, s.repair_description, s.status, s.created_at as due_date, s.created_at, 
-                    'ticket' as type, CONCAT(s.customer_name, ' (', s.phone_number, ')') as customer_info,
+                    'ticket' as type, 
+                    CONCAT(
+                        CASE 
+                            WHEN s.customer_name IS NOT NULL AND s.customer_name != '' THEN s.customer_name 
+                            WHEN s.category LIKE '%Mainten%' THEN CONCAT('Maintenance: ', s.subject)
+                            ELSE 'Pelanggan Umum'
+                        END, 
+                        IF(s.phone_number IS NOT NULL AND s.phone_number != '', CONCAT(' (', s.phone_number, ')'), '')
+                    ) as customer_info,
                     (SELECT GROUP_CONCAT(e3.full_name SEPARATOR ', ') 
                      FROM ticket_assignees sa3 JOIN employees e3 ON sa3.employee_id = e3.id 
                      WHERE sa3.ticket_id = s.id) as pic_names
                 FROM support_tickets s
                 LEFT JOIN ticket_assignees sa ON s.id = sa.ticket_id
-                WHERE (1=1 ${isCoordinator ? '' : 'AND (s.assigned_to = ? OR sa.employee_id = ?)'}) 
+                WHERE (s.assigned_to = ? OR sa.employee_id = ?)
                 ${ticketStatusFilter}
                 ${dateWhere}
                 GROUP BY s.id
@@ -128,9 +143,7 @@ export async function GET(req: Request) {
             finalParams.push(employeeId, employeeId);
             finalParams.push(...dateParams);
             // 2. For ticketsPart
-            if (!isCoordinator) {
-                finalParams.push(employeeId, employeeId);
-            }
+            finalParams.push(employeeId, employeeId);
             finalParams.push(...dateParams);
 
             const rows = await db.query(finalSql, finalParams);

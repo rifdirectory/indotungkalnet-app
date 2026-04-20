@@ -22,32 +22,45 @@ import Link from 'next/link';
 // Import our new server actions
 import { 
   getRolesAction, 
+  getEmployeesAction,
   getMenuPermissionsAction, 
   updateMenuPermissionAction,
 } from '@/actions/permissions';
 
 import { STANDARD_MENUS } from '@/lib/constants';
+import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 
 export default function MenuPermissionsPage() {
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState<'role' | 'employee'>('role');
   const [roles, setRoles] = useState<string[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [selectedRole, setSelectedRole] = useState('');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | ''>('');
   const [permissions, setPermissions] = useState<any[]>([]);
   const [message, setMessage] = useState({ type: 'success', text: '', open: false });
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Get Roles
-      const roleRes = await getRolesAction();
+      // 1. Get Roles & Employees
+      const [roleRes, empRes] = await Promise.all([
+        getRolesAction(),
+        getEmployeesAction()
+      ]);
+
       if (roleRes.success && roleRes.roles) {
         setRoles(roleRes.roles);
         if (roleRes.roles.length > 0) setSelectedRole(roleRes.roles[0]);
       }
 
-      // 2. Get All Permissions
-      const permRes = await getMenuPermissionsAction();
+      if (empRes.success && empRes.employees) {
+        setEmployees(empRes.employees);
+      }
+
+      // 2. Initial Permissions fetch
+      const permRes = await getMenuPermissionsAction(roleRes.roles?.[0]);
       if (permRes.success && permRes.permissions) {
         setPermissions(permRes.permissions);
       }
@@ -63,10 +76,37 @@ export default function MenuPermissionsPage() {
     fetchData();
   }, []);
 
+  // Fetch permissions when selection changes
+  useEffect(() => {
+    const fetchSpecificPermissions = async () => {
+      if (mode === 'role' && selectedRole) {
+        const res = await getMenuPermissionsAction(selectedRole);
+        if (res.success) setPermissions(res.permissions || []);
+      } else if (mode === 'employee' && selectedEmployeeId) {
+        const res = await getMenuPermissionsAction(undefined, selectedEmployeeId as number);
+        if (res.success) setPermissions(res.permissions || []);
+      } else if (mode === 'employee' && !selectedEmployeeId) {
+        setPermissions([]);
+      }
+    };
+    fetchSpecificPermissions();
+  }, [mode, selectedRole, selectedEmployeeId]);
+
   const handleToggle = async (platform: 'web' | 'mobile', menuKey: string, currentEnabled: boolean) => {
+    if (mode === 'employee' && !selectedEmployeeId) {
+      setMessage({ type: 'warning', text: 'Silakan pilih pegawai terlebih dahulu', open: true });
+      return;
+    }
+
+    // Admin role cannot be modified
+    if (mode === 'role' && selectedRole === 'admin') {
+      return;
+    }
+
     try {
+      const target = mode === 'role' ? { role: selectedRole } : { employeeId: selectedEmployeeId as number };
       const res = await updateMenuPermissionAction(
-        selectedRole,
+        target,
         platform,
         menuKey,
         !currentEnabled
@@ -75,13 +115,24 @@ export default function MenuPermissionsPage() {
       if (res.success) {
         // Optimistic UI update
         setPermissions(prev => {
-          const index = prev.findIndex(p => p.role_name === selectedRole && p.platform === platform && p.menu_key === menuKey);
+          const match = (p: any) => 
+            p.platform === platform && 
+            p.menu_key === menuKey &&
+            (mode === 'role' ? p.role_name === selectedRole : p.employee_id === selectedEmployeeId);
+            
+          const index = prev.findIndex(match);
           if (index > -1) {
             const newPerms = [...prev];
             newPerms[index] = { ...newPerms[index], is_enabled: !currentEnabled ? 1 : 0 };
             return newPerms;
           } else {
-            return [...prev, { role_name: selectedRole, platform, menu_key: menuKey, is_enabled: !currentEnabled ? 1 : 0 }];
+            return [...prev, { 
+              role_name: mode === 'role' ? selectedRole : null, 
+              employee_id: mode === 'employee' ? selectedEmployeeId : null,
+              platform, 
+              menu_key: menuKey, 
+              is_enabled: !currentEnabled ? 1 : 0 
+            }];
           }
         });
       } else {
@@ -93,7 +144,10 @@ export default function MenuPermissionsPage() {
   };
 
   const isMenuEnabled = (platform: 'web' | 'mobile', menuKey: string) => {
-    const perm = permissions.find(p => p.role_name === selectedRole && p.platform === platform && p.menu_key === menuKey);
+    // Admin role always has all menus enabled
+    if (mode === 'role' && selectedRole === 'admin') return true;
+    
+    const perm = permissions.find(p => p.platform === platform && p.menu_key === menuKey);
     // Allow everything by default if no database mapping exists
     return perm ? perm.is_enabled === 1 : true;
   };
@@ -126,7 +180,7 @@ export default function MenuPermissionsPage() {
             Hak Akses Menu
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Kelola visibilitas menu navigasi untuk setiap jabatan di Web dan Mobile.
+            Kelola visibilitas menu navigasi berdasarkan Jabatan atau override khusus per Pegawai.
           </Typography>
         </Box>
         <Button 
@@ -140,28 +194,72 @@ export default function MenuPermissionsPage() {
         </Button>
       </Stack>
 
-      {/* Role Selector Card */}
+      {/* Selector Card */}
       <Card sx={{ p: 4, borderRadius: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', mb: 4 }}>
         <Grid container spacing={4} alignItems="center">
-          <Grid item xs={12} md={4}>
-            <FormControl fullWidth variant="outlined">
-              <InputLabel>Pilih Jabatan / Role</InputLabel>
-              <Select
-                value={selectedRole}
-                label="Pilih Jabatan / Role"
-                onChange={(e) => setSelectedRole(e.target.value)}
-                sx={{ borderRadius: 3 }}
-              >
-                {roles.map(role => (
-                  <MenuItem key={role} value={role}>{role.toUpperCase()}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+          <Grid item xs={12} md={5}>
+            <Stack spacing={3}>
+              <Box>
+                <Typography variant="caption" sx={{ fontWeight: 700, mb: 1, display: 'block', color: 'text.secondary' }}>
+                  TIPE PENGATURAN
+                </Typography>
+                <ToggleButtonGroup
+                  value={mode}
+                  exclusive
+                  onChange={(_, val) => val && setMode(val)}
+                  fullWidth
+                  size="small"
+                  color="primary"
+                >
+                  <ToggleButton value="role" sx={{ py: 1.5, fontWeight: 700 }}>BERDASARKAN JABATAN</ToggleButton>
+                  <ToggleButton value="employee" sx={{ py: 1.5, fontWeight: 700 }}>PER PEGAWAI (OVERRIDE)</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+
+              {mode === 'role' ? (
+                <FormControl fullWidth variant="outlined">
+                  <InputLabel>Pilih Jabatan / Role</InputLabel>
+                  <Select
+                    value={selectedRole}
+                    label="Pilih Jabatan / Role"
+                    onChange={(e) => setSelectedRole(e.target.value)}
+                    sx={{ borderRadius: 3 }}
+                  >
+                    {roles.map(role => (
+                      <MenuItem key={role} value={role}>{role.toUpperCase()}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              ) : (
+                <FormControl fullWidth variant="outlined">
+                  <InputLabel>Pilih Nama Pegawai</InputLabel>
+                  <Select
+                    value={selectedEmployeeId}
+                    label="Pilih Nama Pegawai"
+                    onChange={(e) => setSelectedEmployeeId(e.target.value as number)}
+                    sx={{ borderRadius: 3 }}
+                  >
+                    <MenuItem value=""><em>-- Pilih Pegawai --</em></MenuItem>
+                    {employees.map(emp => (
+                      <MenuItem key={emp.id} value={emp.id}>
+                        {emp.full_name} ({emp.position_name})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+            </Stack>
           </Grid>
-          <Grid item xs={12} md={8}>
-            <Alert severity="info" sx={{ borderRadius: 3 }}>
-              Perubahan pada halaman ini menggunakan <strong>Server Actions</strong> untuk stabilitas tinggi dan perubahan langsung berdampak pada aplikasi.
-            </Alert>
+          <Grid item xs={12} md={7}>
+            {mode === 'employee' ? (
+              <Alert severity="warning" variant="outlined" sx={{ borderRadius: 3 }}>
+                <strong>Pengaturan Pegawai</strong> akan menimpa (override) pengaturan jabatan. Jika pegawai tidak memiliki pengaturan khusus, sistem akan menggunakan pengaturan dari jabatannya.
+              </Alert>
+            ) : (
+              <Alert severity="info" variant="outlined" sx={{ borderRadius: 3 }}>
+                Pengaturan berdasarkan <strong>Jabatan</strong> berlaku untuk semua pegawai yang memiliki jabatan tersebut, kecuali jika pegawai tersebut memiliki pengaturan override individu.
+              </Alert>
+            )}
           </Grid>
         </Grid>
       </Card>
@@ -187,6 +285,7 @@ export default function MenuPermissionsPage() {
                     justifyContent: 'space-between', 
                     p: 1.5, 
                     borderRadius: 2,
+                    bgcolor: isMenuEnabled('web', menu.key) ? 'transparent' : alpha(theme.palette.error.main, 0.02),
                     '&:hover': { bgcolor: alpha('#000', 0.02) }
                   }}
                 >
@@ -195,6 +294,7 @@ export default function MenuPermissionsPage() {
                     checked={isMenuEnabled('web', menu.key)}
                     onChange={() => handleToggle('web', menu.key, isMenuEnabled('web', menu.key))}
                     color="primary"
+                    disabled={mode === 'role' && selectedRole === 'admin'}
                   />
                 </Box>
               ))}
@@ -222,6 +322,7 @@ export default function MenuPermissionsPage() {
                     justifyContent: 'space-between', 
                     p: 1.5, 
                     borderRadius: 2,
+                    bgcolor: isMenuEnabled('mobile', menu.key) ? 'transparent' : alpha(theme.palette.error.main, 0.02),
                     '&:hover': { bgcolor: alpha('#000', 0.02) }
                   }}
                 >
@@ -230,6 +331,7 @@ export default function MenuPermissionsPage() {
                     checked={isMenuEnabled('mobile', menu.key)}
                     onChange={() => handleToggle('mobile', menu.key, isMenuEnabled('mobile', menu.key))}
                     color="success"
+                    disabled={mode === 'role' && selectedRole === 'admin'}
                   />
                 </Box>
               ))}
@@ -242,6 +344,7 @@ export default function MenuPermissionsPage() {
         open={message.open} 
         autoHideDuration={4000} 
         onClose={() => setMessage({ ...message, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert severity={message.type as any} variant="filled" sx={{ width: '100%', borderRadius: 3 }}>
           {message.text}

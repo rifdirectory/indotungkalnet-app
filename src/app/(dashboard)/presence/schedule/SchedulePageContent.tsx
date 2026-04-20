@@ -12,6 +12,7 @@ import {
   ChevronLeft as PrevIcon,
   ChevronRight as NextIcon
 } from "@mui/icons-material";
+import { safeFetch } from '@/lib/fetchUtils';
 
 // --- Utility Functions (Timezone Safe) ---
 const formatDate = (date: Date) => {
@@ -62,16 +63,16 @@ export default function SchedulePageContent() {
     
     try {
         const [empRes, shiftRes, schedRes, holidayRes] = await Promise.all([
-          fetch('/api/employees').then(res => res.json()),
-          fetch('/api/presence/shifts').then(res => res.json()),
-          fetch(`/api/presence/schedule?start=${start}&end=${end}`).then(res => res.json()),
-          fetch(`/api/presence/holidays?year=${year}`).then(res => res.json()).catch(() => ({ success: false }))
+          safeFetch('/api/employees'),
+          safeFetch('/api/presence/shifts'),
+          safeFetch(`/api/presence/schedule?start=${start}&end=${end}`),
+          safeFetch(`/api/presence/holidays?year=${year}`)
         ]);
 
-        if(empRes.success) setEmployees(Array.isArray(empRes.data) ? empRes.data.filter((e: any) => e.use_presence === 1) : []);
-        if(shiftRes.success) setShifts(Array.isArray(shiftRes.data) ? shiftRes.data : []);
-        if(schedRes.success) setSchedules(Array.isArray(schedRes.data) ? schedRes.data : []);
-        if(holidayRes.success) setHolidays(Array.isArray(holidayRes.data) ? holidayRes.data : []);
+        if(empRes.success) setEmployees(Array.isArray(empRes.data.data) ? empRes.data.data.filter((e: any) => e.use_presence === 1) : []);
+        if(shiftRes.success) setShifts(Array.isArray(shiftRes.data.data) ? shiftRes.data.data : []);
+        if(schedRes.success) setSchedules(Array.isArray(schedRes.data.data) ? schedRes.data.data : []);
+        if(holidayRes.success) setHolidays(Array.isArray(holidayRes.data.data) ? holidayRes.data.data : []);
     } catch (e) {
         console.error("Fetch error:", e);
     }
@@ -105,7 +106,7 @@ export default function SchedulePageContent() {
   const handleSave = async () => {
     if (!selectedCell) return;
     
-    const res = await fetch('/api/presence/schedule', {
+    const { success } = await safeFetch('/api/presence/schedule', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -115,7 +116,7 @@ export default function SchedulePageContent() {
       })
     });
 
-    if (res.ok) {
+    if (success) {
       setOpen(false);
       fetchData();
     }
@@ -217,7 +218,7 @@ export default function SchedulePageContent() {
       </Stack>
 
       <Card sx={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 30px rgba(0,0,0,0.08)' }}>
-        <TableContainer>
+        <TableContainer sx={{ maxHeight: 'calc(100vh - 220px)', '&::-webkit-scrollbar': { width: 8, height: 8 }, '&::-webkit-scrollbar-thumb': { bgcolor: alpha(theme.palette.primary.main, 0.2), borderRadius: 4 } }}>
           <Table sx={{ minWidth: 1500, tableLayout: 'fixed' }}>
             <TableHead sx={{ bgcolor: '#f8f9fa', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid', borderColor: 'divider' }}>
               <TableRow>

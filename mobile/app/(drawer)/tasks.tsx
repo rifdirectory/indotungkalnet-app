@@ -156,7 +156,7 @@ export default function MyTasksScreen() {
   const navigateToDetail = (task: any) => {
     router.push({
       pathname: `/task-detail/${task.id}`,
-      params: { type: task.type }
+      params: { type: task.type, source: 'tasks' }
     });
   };
 
@@ -300,11 +300,11 @@ export default function MyTasksScreen() {
                                 {statusInfo?.label || 'UNKNOWN'}
                             </Text>
                         </View>
-                        <View className={isTicket ? "bg-orange-100 px-2 py-1 rounded-md" : "bg-purple-100 px-2 py-1 rounded-md"}>
-                            <Text className={isTicket ? "text-orange-600 font-bold text-[8px]" : "text-purple-600 font-bold text-[8px]"}>
-                                {isTicket ? 'TIKET GANGGUAN' : 'TUGAS MANUAL'}
-                            </Text>
-                        </View>
+                        {!isTicket && (
+                            <View className="bg-purple-100 px-2 py-1 rounded-md">
+                                <Text className="text-purple-600 font-bold text-[8px]">TUGAS MANUAL</Text>
+                            </View>
+                        )}
                     </View>
                     <View className="flex-row items-center">
                         <Text className="text-[9px] text-gray-300 font-bold">#{task.id}</Text>

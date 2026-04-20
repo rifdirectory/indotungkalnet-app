@@ -162,7 +162,7 @@ export default function TicketListScreen() {
             return (
               <TouchableOpacity 
                 key={ticket.id}
-                onPress={() => router.push(`/task-detail/${ticket.id}?type=ticket`)}
+                onPress={() => router.push(`/task-detail/${ticket.id}?type=ticket&source=tickets`)}
                 className="bg-white border border-slate-100 rounded-3xl p-5 mb-4 shadow-sm shadow-slate-200/50"
               >
                 <View className="flex-row justify-between items-start mb-4">

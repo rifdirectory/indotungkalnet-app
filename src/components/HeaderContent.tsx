@@ -2,21 +2,28 @@
 
 import * as React from 'react';
 import { 
-  Box, 
-  InputBase, 
-  IconButton, 
-  Badge, 
-  Avatar, 
+  Box,
+  InputBase,
+  IconButton,
+  Badge,
+  Avatar,
   Typography, 
   Stack,
   alpha,
-  useTheme
+  useTheme,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Divider
 } from '@mui/material';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { getUserSessionAction } from '@/actions/permissions';
 import { 
   Search as SearchIcon, 
   Notifications as NotificationsIcon,
   Person as PersonIcon,
+  Logout as LogoutIcon,
   Inventory as InventoryIcon,
   Dashboard as DashboardIcon,
   People as PeopleIcon,
@@ -82,6 +89,29 @@ export default function HeaderContent({ onLogout }: HeaderContentProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const theme = useTheme();
+  const [user, setUser] = React.useState<any>(null);
+  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
+
+  const handleOpenUserMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseUserMenu = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogoutClick = () => {
+    handleCloseUserMenu();
+    if (onLogout) onLogout();
+  };
+
+  React.useEffect(() => {
+    const fetchUser = async () => {
+      const res = await getUserSessionAction();
+      if (res.success) setUser(res.user);
+    };
+    fetchUser();
+  }, []);
 
   const view = searchParams.get('view');
 
@@ -139,18 +169,25 @@ export default function HeaderContent({ onLogout }: HeaderContentProps) {
           direction="row" 
           spacing={1.5} 
           alignItems="center" 
-          onClick={onLogout}
+          onClick={handleOpenUserMenu}
           sx={{ 
             cursor: 'pointer',
-            padding: '4px 8px',
-            borderRadius: 2,
+            padding: '4px 12px',
+            borderRadius: 3,
+            bgcolor: Boolean(anchorEl) ? 'rgba(0, 0, 0, 0.06)' : 'transparent',
+            transition: 'all 0.2s',
+            border: '1px solid',
+            borderColor: Boolean(anchorEl) ? 'divider' : 'transparent',
             '&:hover': {
-              bgcolor: 'rgba(0, 0, 0, 0.04)'
+              bgcolor: 'rgba(0, 0, 0, 0.04)',
+              borderColor: 'divider'
             }
           }}
         >
-          <Stack spacing={0.5} sx={{ display: { xs: 'none', md: 'flex' }, mr: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1 }}>Administrator</Typography>
+          <Stack spacing={0.5} sx={{ display: { xs: 'none', md: 'flex' }, mr: 1, alignItems: 'flex-end' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1 }}>
+              {user?.username === 'admin' ? 'Administrator' : (user?.username || 'Loading...')}
+            </Typography>
           </Stack>
           <Avatar
             sx={{
@@ -163,6 +200,57 @@ export default function HeaderContent({ onLogout }: HeaderContentProps) {
             <PersonIcon sx={{ fontSize: 20 }} />
           </Avatar>
         </Stack>
+
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleCloseUserMenu}
+          onClick={handleCloseUserMenu}
+          PaperProps={{
+            elevation: 0,
+            sx: {
+              overflow: 'visible',
+              filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.1))',
+              mt: 1.5,
+              borderRadius: 3,
+              minWidth: 180,
+              '&:before': {
+                content: '""',
+                display: 'block',
+                position: 'absolute',
+                top: 0,
+                right: 14,
+                width: 10,
+                height: 10,
+                bgcolor: 'background.paper',
+                transform: 'translateY(-50%) rotate(45deg)',
+                zIndex: 0,
+              },
+            },
+          }}
+          transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+          anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        >
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{user?.username}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+              {user?.role || 'authorized user'}
+            </Typography>
+          </Box>
+          <Divider />
+          <MenuItem onClick={handleCloseUserMenu} sx={{ py: 1, borderRadius: 2, mx: 1, mt: 0.5 }}>
+            <ListItemIcon>
+              <PersonIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="Profil Saya" primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }} />
+          </MenuItem>
+          <MenuItem onClick={handleLogoutClick} sx={{ py: 1, borderRadius: 2, mx: 1, mb: 0.5, color: 'error.main' }}>
+            <ListItemIcon>
+              <LogoutIcon fontSize="small" color="error" />
+            </ListItemIcon>
+            <ListItemText primary="Logout" primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }} />
+          </MenuItem>
+        </Menu>
       </Stack>
     </>
   );
